@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { ArrowLeft, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { EquipmentTable } from "@/components/equipment/EquipmentTable";
 import { EquipmentFormDialog } from "@/components/equipment/EquipmentFormDialog";
+import { EquipmentGroupGrid } from "@/components/equipment/EquipmentGroupGrid";
+import { groupKeyFor, type GroupBy } from "@/lib/groupEquipment";
 
 const CONDITION_FILTERS: (EquipmentCondition | "All")[] = [
   "All",
@@ -34,6 +36,14 @@ const CONDITION_FILTERS: (EquipmentCondition | "All")[] = [
   "Needs Repair",
   "Broken",
   "Missing",
+];
+
+type View = "all" | GroupBy;
+
+const VIEW_OPTIONS: { value: View; label: string }[] = [
+  { value: "location", label: "By room" },
+  { value: "category", label: "By category" },
+  { value: "all", label: "All items" },
 ];
 
 interface UserOption {
@@ -48,6 +58,8 @@ export function EquipmentPage() {
   const [users, setUsers] = useState<UserOption[]>([]);
   const [search, setSearch] = useState("");
   const [conditionFilter, setConditionFilter] = useState<EquipmentCondition | "All">("All");
+  const [view, setView] = useState<View>("location");
+  const [openGroup, setOpenGroup] = useState<{ key: string; name: string } | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Equipment | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Equipment | null>(null);
@@ -88,6 +100,17 @@ export function EquipmentPage() {
     });
   }, [equipment, search, conditionFilter]);
 
+  // Inside an open room/category, narrow further to just that group's items.
+  const visibleItems = useMemo(() => {
+    if (view === "all" || openGroup === null) return filtered;
+    return filtered.filter((item) => groupKeyFor(item, view) === openGroup.key);
+  }, [filtered, view, openGroup]);
+
+  function changeView(next: View) {
+    setView(next);
+    setOpenGroup(null);
+  }
+
   function openAddDialog() {
     setEditingItem(null);
     setDialogOpen(true);
@@ -109,12 +132,35 @@ export function EquipmentPage() {
     setDeleteTarget(null);
   }
 
+  const showingGroupGrid = view !== "all" && openGroup === null;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1>Equipment</h1>
-          <p className="text-sm text-muted-foreground">{filtered.length} of {equipment.length} items</p>
+          {openGroup ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setOpenGroup(null)}
+                className="mb-1 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="size-4" />
+                {view === "location" ? "All rooms" : "All categories"}
+              </button>
+              <h1>{openGroup.name}</h1>
+              <p className="text-sm text-muted-foreground">
+                {visibleItems.length} {visibleItems.length === 1 ? "item" : "items"}
+              </p>
+            </>
+          ) : (
+            <>
+              <h1>Equipment</h1>
+              <p className="text-sm text-muted-foreground">
+                {filtered.length} of {equipment.length} items
+              </p>
+            </>
+          )}
         </div>
         {canEdit && (
           <Button onClick={openAddDialog}>
@@ -125,16 +171,35 @@ export function EquipmentPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
+        <div className="inline-flex rounded-md border p-0.5">
+          {VIEW_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => changeView(option.value)}
+              className={`rounded-sm px-3 py-1 text-sm font-medium transition-colors ${
+                view === option.value
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
         <div className="relative w-full max-w-xs">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search by name, location, category…"
+            placeholder="Search by name, room, category…"
             className="pl-8"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Select value={conditionFilter} onValueChange={(v) => setConditionFilter(v as EquipmentCondition | "All")}>
+        <Select
+          value={conditionFilter}
+          onValueChange={(v) => setConditionFilter(v as EquipmentCondition | "All")}
+        >
           <SelectTrigger className="w-48">
             <SelectValue />
           </SelectTrigger>
@@ -154,9 +219,11 @@ export function EquipmentPage() {
         <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
           Loading equipment…
         </div>
+      ) : showingGroupGrid ? (
+        <EquipmentGroupGrid items={filtered} groupBy={view} onSelect={setOpenGroup} />
       ) : (
         <EquipmentTable
-          items={filtered}
+          items={visibleItems}
           usersById={usersById}
           canEdit={canEdit}
           canDelete={canDelete}
