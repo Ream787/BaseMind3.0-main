@@ -57,7 +57,23 @@ Fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from step 2.
 npm run dev
 ```
 
-### 6. Create the first Admin
+### 6. Decide on email confirmation
+
+Supabase turns on **Confirm email** by default, so every new account must click a link before it
+can sign in. This app already gates access behind admin approval, so that confirmation step is
+mostly redundant friction for a small group.
+
+To turn it off: Supabase Dashboard → Authentication → Providers → Email → toggle off
+**Confirm email**. Leave it on only if you want addresses verified for future password resets.
+
+If you leave it on, sign-in fails with `Email not confirmed` until the link is clicked. You can
+always confirm an address manually from the SQL Editor:
+
+```sql
+update auth.users set email_confirmed_at = now() where email = 'you@example.com';
+```
+
+### 7. Create the first Admin
 
 There's no admin yet to approve the first signup, so:
 
@@ -69,8 +85,17 @@ There's no admin yet to approve the first signup, so:
    update public.users set role = 'Admin', status = 'Active' where email = 'you@example.com';
    ```
 
-3. Sign out and back in — you'll land on the Equipment page with an "Users" tab for approving
+   Note this touches `public.users` (role/status) only — it does **not** confirm the email
+   address. That's the separate `auth.users` step in step 6.
+
+3. Sign out and back in — you'll land on the Equipment page with a "Users" tab for approving
    everyone else.
+
+To check the signup trigger created your profile row correctly:
+
+```sql
+select id, email, role, status from public.users;
+```
 
 ## Deploying (GitHub + Vercel)
 
