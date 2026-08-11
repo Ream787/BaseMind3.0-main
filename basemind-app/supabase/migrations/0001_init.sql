@@ -101,11 +101,17 @@ $$;
 -- user allowed to UPDATE their own row could otherwise set role='Admin'
 -- themselves. This trigger silently reverts those two columns back to
 -- their previous value unless the actor is an Active Admin.
+--
+-- The auth.uid() check matters: statements from the SQL Editor or the
+-- service_role key carry no JWT, and without this they'd be treated as
+-- "not an Admin" and silently reverted — which would break the first-admin
+-- bootstrap at the bottom of this file. Those callers already bypass RLS
+-- and are fully trusted; anon clients are blocked by users_update instead.
 -- =====================================================================
 create or replace function public.protect_user_fields()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  if public.current_role() is distinct from 'Admin' then
+  if auth.uid() is not null and public.current_role() is distinct from 'Admin' then
     new.role := old.role;
     new.status := old.status;
   end if;

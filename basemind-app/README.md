@@ -37,9 +37,12 @@ Create a new project at [supabase.com](https://supabase.com/dashboard). You'll n
 
 ### 3. Run the schema
 
-Open the SQL Editor in your Supabase project and run the contents of
-[`supabase/migrations/0001_init.sql`](./supabase/migrations/0001_init.sql) once. This creates the
+Open the SQL Editor in your Supabase project and run the migrations in
+[`supabase/migrations/`](./supabase/migrations/) in order, once each. `0001_init.sql` creates the
 `users` and `equipment` tables, the signup trigger, and all RLS policies.
+
+If you set up before `0002` existed, run `0002_fix_admin_bootstrap.sql` too — without it the
+first-admin promotion in step 7 silently does nothing.
 
 (If you're using the Supabase CLI locally instead: `supabase link` then `supabase db push`.)
 
