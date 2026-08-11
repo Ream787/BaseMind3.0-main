@@ -87,6 +87,8 @@ export function EventFormDialog({
       end_date: form.end_date || null,
       site_id: form.site_id === NO_SITE ? null : form.site_id,
       notes: form.notes.trim() || null,
+      // Headcount is set on the event page alongside the menu it scales.
+      headcount: event?.headcount ?? null,
     };
 
     const { error } = event

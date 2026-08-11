@@ -76,9 +76,49 @@ export type CampEvent = {
   end_date: string | null;
   site_id: string | null;
   notes: string | null;
+  /** How many people are going; scales menu quantities. */
+  headcount: number | null;
   created_at: string;
   updated_at: string;
 };
+
+export type Menu = {
+  id: string;
+  name: string;
+  description: string | null;
+  /** How many people the quantities are written for. */
+  serves: number;
+  day_count: number;
+  category: string | null;
+  /** Null for a reusable preset; set for a particular camp's menu. */
+  event_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NewMenu = Omit<Menu, "id" | "created_at" | "updated_at">;
+
+export type MenuMeal = {
+  id: string;
+  menu_id: string;
+  day_number: number;
+  meal_slot: string;
+  name: string;
+  notes: string | null;
+  created_at: string;
+};
+
+export type NewMenuMeal = Omit<MenuMeal, "id" | "created_at">;
+
+export type MenuMealItem = {
+  id: string;
+  meal_id: string;
+  food_item_id: string;
+  quantity: number;
+  created_at: string;
+};
+
+export type NewMenuMealItem = Omit<MenuMealItem, "id" | "created_at">;
 
 export type NewCampEvent = Omit<CampEvent, "id" | "created_at" | "updated_at">;
 
@@ -137,8 +177,20 @@ export type Database = {
       event_equipment: TableDef<EventEquipment, NewEventEquipment>;
       food_items: TableDef<FoodItem, NewFoodItem>;
       event_food: TableDef<EventFood, NewEventFood>;
+      menus: TableDef<Menu, NewMenu>;
+      menu_meals: TableDef<MenuMeal, NewMenuMeal>;
+      menu_meal_items: TableDef<MenuMealItem, NewMenuMealItem>;
     };
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      apply_menu_preset: {
+        Args: { preset_id: string; target_event_id: string; target_headcount?: number | null };
+        Returns: string;
+      };
+      save_menu_as_preset: {
+        Args: { source_menu_id: string; preset_name: string; preset_category?: string | null };
+        Returns: string;
+      };
+    };
   };
 };

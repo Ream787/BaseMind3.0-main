@@ -1,4 +1,14 @@
-import type { EventFood, FoodItem } from "@/types/database";
+import type { FoodItem } from "@/types/database";
+
+/**
+ * The fields a requirement needs, whatever produced it — a row typed in on the
+ * event, or a total rolled up from the menu's meals.
+ */
+export type FoodRequirement = {
+  id: string;
+  food_item_id: string;
+  quantity: number;
+};
 
 export type FoodPlanLine = {
   eventFoodId: string;
@@ -21,7 +31,7 @@ export type FoodPlanLine = {
  * as nameless rows — the DB cascade should prevent it, but a stale realtime
  * payload can briefly leave one behind.
  */
-export function buildFoodPlan(requirements: EventFood[], stock: FoodItem[]): FoodPlanLine[] {
+export function buildFoodPlan(requirements: FoodRequirement[], stock: FoodItem[]): FoodPlanLine[] {
   const stockById = new Map(stock.map((item) => [item.id, item]));
 
   return requirements

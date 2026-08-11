@@ -10,6 +10,9 @@ begin;
 -- Child rows first so the foreign keys stay happy. (The event_* tables
 -- cascade from events anyway, but being explicit means this also cleans up
 -- sample food/equipment that was attached to a real event of your own.)
+-- Menus cascade to their meals and ingredients.
+delete from public.menus where name like '[sample]%';
+
 delete from public.equipment_loans
   where equipment_id in (select id from public.equipment where name like '[sample]%');
 

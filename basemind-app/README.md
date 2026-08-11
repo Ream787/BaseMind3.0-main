@@ -7,7 +7,11 @@ Equipment, camp and food management for a single Scout group, with role-based ac
 - **Equipment** — inventory browsable by room or by category, with condition tracking
 - **Calendar** — camps, hikes and meetings on a month view, plus what's coming up
 - **Camping sites** — a directory of venues with phone numbers, addresses and descriptions
+- **Borrowing** — who has what, from which group, and when it's due back, with availability
+  taken off the equipment list while it's out
 - **Food store** — what's in the cupboard, in whatever units suit (kg, tins, litres)
+- **Menus** — plan meals per day for a camp; save the good ones to a library filtered by
+  length and type (2-day hiking, weekend camping…) and reuse them, scaled to the group size
 - **Camp plans** — per-event equipment packing lists and food requirements, with a shopping
   list worked out automatically from what the food store doesn't already cover
 - **PDF export** — the whole camp plan, site contact details included, as a printable download
@@ -53,6 +57,8 @@ Open the SQL Editor in your Supabase project and run the migrations in
 | `0001_init.sql` | `users` and `equipment` tables, signup trigger, RLS policies |
 | `0002_fix_admin_bootstrap.sql` | Lets the first-admin promotion in step 7 actually apply |
 | `0003_camps_and_food.sql` | Camping sites, events, packing lists, food store, camp food plans |
+| `0004_equipment_loans.sql` | Borrowing: who has what, and when it's due back |
+| `0005_menus.sql` | Menus, meals and ingredients, plus event headcount |
 
 If you already set the project up, run whichever ones you haven't yet — the app's calendar,
 sites and food pages will error until `0003` has been applied.

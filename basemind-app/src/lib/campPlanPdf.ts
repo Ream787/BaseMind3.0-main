@@ -13,9 +13,16 @@ export type PackingLine = {
   quantity: number;
 };
 
+export type MenuDay = {
+  day: number;
+  meals: { slot: string; name: string; notes: string | null }[];
+};
+
 export type CampPlanData = {
   event: CampEvent;
   site: CampingSite | null;
+  menuName: string | null;
+  menuDays: MenuDay[];
   packing: PackingLine[];
   foodPlan: FoodPlanLine[];
   shopping: FoodPlanLine[];
@@ -61,7 +68,12 @@ export async function downloadCampPlanPdf(data: CampPlanData): Promise<void> {
   doc.setFont("helvetica", "normal");
   doc.setTextColor(90);
   doc.text(formatDateRange(data.event), MARGIN, y);
-  y += 8;
+  y += 5;
+  if (data.event.headcount) {
+    doc.text(`${data.event.headcount} people`, MARGIN, y);
+    y += 5;
+  }
+  y += 3;
   doc.setTextColor(0);
 
   // ---- Camping site ------------------------------------------------------
@@ -84,6 +96,31 @@ export async function downloadCampPlanPdf(data: CampPlanData): Promise<void> {
         0: { fontStyle: "bold", cellWidth: 28 },
         1: { cellWidth: pageWidth - MARGIN * 2 - 28 },
       },
+      margin: { left: MARGIN, right: MARGIN },
+    });
+    y = afterTable(doc);
+  }
+
+  // ---- Menu --------------------------------------------------------------
+  if (data.menuDays.length > 0) {
+    y = sectionHeading(doc, data.menuName ? `Menu — ${data.menuName}` : "Menu", y);
+
+    const menuRows = data.menuDays.flatMap((day) =>
+      day.meals.map((meal, index) => [
+        index === 0 ? `Day ${day.day}` : "",
+        meal.slot,
+        meal.notes ? `${meal.name} (${meal.notes})` : meal.name,
+      ]),
+    );
+
+    autoTable(doc, {
+      startY: y,
+      head: [["", "Meal", "What's cooking"]],
+      body: menuRows,
+      theme: "striped",
+      headStyles: { fillColor: [124, 58, 237], textColor: 255, fontSize: 10 },
+      styles: { fontSize: 10, cellPadding: 2 },
+      columnStyles: { 0: { cellWidth: 20, fontStyle: "bold" }, 1: { cellWidth: 34 } },
       margin: { left: MARGIN, right: MARGIN },
     });
     y = afterTable(doc);

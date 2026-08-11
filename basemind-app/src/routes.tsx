@@ -10,6 +10,7 @@ import { EventsPage } from "@/components/events/EventsPage";
 import { EventDetailPage } from "@/components/events/EventDetailPage";
 import { CampingSitesPage } from "@/components/sites/CampingSitesPage";
 import { LoansPage } from "@/components/loans/LoansPage";
+import { MenusPage } from "@/components/menus/MenusPage";
 import { FoodPage } from "@/components/food/FoodPage";
 import { UserManagementPage } from "@/components/users/UserManagementPage";
 import { EquipmentProvider } from "@/context/EquipmentContext";
@@ -35,6 +36,7 @@ export const router = createBrowserRouter([
       { path: "events", element: <EventsPage /> },
       { path: "events/:eventId", element: <EventDetailPage /> },
       { path: "sites", element: <CampingSitesPage /> },
+      { path: "menus", element: <MenusPage /> },
       { path: "food", element: <FoodPage /> },
       {
         path: "users",

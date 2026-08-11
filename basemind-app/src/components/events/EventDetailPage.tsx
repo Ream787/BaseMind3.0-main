@@ -17,7 +17,9 @@ import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
 import { buildFoodPlan, roundQuantity, toShoppingList } from "@/lib/shoppingList";
+import { aggregateMenuRequirements, mealsByDay, mergeRequirements } from "@/lib/menus";
 import { downloadCampPlanPdf, formatDateRange } from "@/lib/campPlanPdf";
+import { EventMenuSection } from "@/components/menus/EventMenuSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +50,9 @@ export function EventDetailPage() {
   const { rows: foodStock } = useRealtimeTable("food_items", { orderBy: "name" });
   const { rows: eventEquipment } = useRealtimeTable("event_equipment");
   const { rows: eventFood } = useRealtimeTable("event_food");
+  const { rows: allMenus } = useRealtimeTable("menus", { orderBy: "name" });
+  const { rows: allMeals } = useRealtimeTable("menu_meals");
+  const { rows: allMealItems } = useRealtimeTable("menu_meal_items");
 
   const [editOpen, setEditOpen] = useState(false);
   const [addEquipmentId, setAddEquipmentId] = useState("");
@@ -77,11 +82,39 @@ export function EventDetailPage() {
     [eventEquipment, eventId, equipmentById],
   );
 
-  const foodPlan = useMemo(
-    () => buildFoodPlan(eventFood.filter((row) => row.event_id === eventId), foodStock),
-    [eventFood, eventId, foodStock],
+  const menu = useMemo(
+    () => allMenus.find((m) => m.event_id === eventId) ?? null,
+    [allMenus, eventId],
   );
+  const menuPresets = useMemo(() => allMenus.filter((m) => m.event_id === null), [allMenus]);
+  const menuMeals = useMemo(
+    () => (menu ? allMeals.filter((m) => m.menu_id === menu.id) : []),
+    [allMeals, menu],
+  );
+  const menuItems = useMemo(
+    () => allMealItems.filter((i) => menuMeals.some((m) => m.id === i.meal_id)),
+    [allMealItems, menuMeals],
+  );
+
+  // The camp menu's quantities are already scaled at the point it was
+  // applied, so no further scaling here — just roll the meals up and add
+  // anything entered by hand on top.
+  const foodPlan = useMemo(() => {
+    const fromMenu = aggregateMenuRequirements(menuMeals, menuItems);
+    const manual = eventFood.filter((row) => row.event_id === eventId);
+    return buildFoodPlan(mergeRequirements(fromMenu, manual), foodStock);
+  }, [menuMeals, menuItems, eventFood, eventId, foodStock]);
+
   const shopping = useMemo(() => toShoppingList(foodPlan), [foodPlan]);
+
+  /** Ingredients that come from the menu can't be edited as standalone rows. */
+  const manualFoodIds = useMemo(
+    () =>
+      new Set(
+        eventFood.filter((row) => row.event_id === eventId).map((row) => row.food_item_id),
+      ),
+    [eventFood, eventId],
+  );
 
   const unusedEquipment = useMemo(
     () => equipment.filter((e) => !packing.some((p) => p.equipment.id === e.id)),
@@ -162,6 +195,11 @@ export function EventDetailPage() {
       await downloadCampPlanPdf({
         event: event!,
         site,
+        menuName: menu?.name ?? null,
+        menuDays: mealsByDay(menuMeals).map(({ day, meals: dayMeals }) => ({
+          day,
+          meals: dayMeals.map((m) => ({ slot: m.meal_slot, name: m.name, notes: m.notes })),
+        })),
         packing: packing.map(({ equipment: item, quantity }) => ({ equipment: item, quantity })),
         foodPlan,
         shopping,
@@ -342,6 +380,16 @@ export function EventDetailPage() {
         )}
       </section>
 
+      <EventMenuSection
+        event={event}
+        menu={menu}
+        meals={menuMeals}
+        items={menuItems}
+        presets={menuPresets}
+        food={foodStock}
+        canEdit={canEdit}
+      />
+
       {/* ---- Food --------------------------------------------------------- */}
       <section className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between gap-3">
@@ -406,11 +454,20 @@ export function EventDetailPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {foodPlan.map((line) => (
+                {foodPlan.map((line) => {
+                  const fromMenu = !manualFoodIds.has(line.foodItemId);
+                  return (
                   <TableRow key={line.eventFoodId}>
-                    <TableCell className="font-medium">{line.name}</TableCell>
+                    <TableCell className="font-medium">
+                      {line.name}
+                      {fromMenu && (
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                          from menu
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell>
-                      {canEdit ? (
+                      {canEdit && !fromMenu ? (
                         <div className="flex items-center gap-1.5">
                           <Input
                             type="number"
@@ -443,18 +500,23 @@ export function EventDetailPage() {
                     </TableCell>
                     {canEdit && (
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Remove ${line.name}`}
-                          onClick={() => removeFood(line.eventFoodId)}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
+                        {fromMenu ? (
+                          <span className="text-xs text-muted-foreground">edit in menu</span>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Remove ${line.name}`}
+                            onClick={() => removeFood(line.eventFoodId)}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        )}
                       </TableCell>
                     )}
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

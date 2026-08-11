@@ -19,6 +19,7 @@ begin;
 -- ---------------------------------------------------------------------
 -- Clear any previous run of this seed (child rows first for the FKs)
 -- ---------------------------------------------------------------------
+delete from public.menus where name like '[sample]%';
 delete from public.equipment_loans
   where equipment_id in (select id from public.equipment where name like '[sample]%');
 delete from public.event_food
@@ -321,6 +322,92 @@ select q.id, v.qty, v.borrower, v.grp, v.pos, v.phone, v.email,
   ) as v(item_name, qty, borrower, grp, pos, phone, email, borrowed, due, returned, notes)
   join public.equipment q on q.name = v.item_name;
 
+-- ---------------------------------------------------------------------
+-- MENU PRESETS
+-- A 2-day camping menu, a 2-day hiking menu (lighter, no fresh food) and
+-- a 1-day trip menu, so the library filters have something to sort.
+-- ---------------------------------------------------------------------
+insert into public.menus (name, description, serves, day_count, category, event_id)
+values
+  ('[sample] Standard Weekend Camp',
+   'Reliable two-day camp menu. Potjie on the Saturday night.',
+   12, 2, 'Camping', null),
+  ('[sample] Lightweight Hike',
+   'Two days, nothing needing a cool box. Everything carried.',
+   8, 2, 'Hiking', null),
+  ('[sample] Day Trip',
+   'Single day out - lunch and a snack only.',
+   12, 1, 'Day trip', null);
+
+-- Meals for the weekend camp
+insert into public.menu_meals (menu_id, day_number, meal_slot, name, notes)
+select m.id, v.day, v.slot, v.meal, v.note
+  from public.menus m
+  join (values
+      (1, 'Breakfast', 'Porridge and coffee', 'Quick start before the hike'),
+      (1, 'Lunch',     'Sandwiches',          null),
+      (1, 'Dinner',    'Chicken potjie with rice', 'Patrols cook in turn'),
+      (2, 'Breakfast', 'Eggs, boerewors and toast', null),
+      (2, 'Lunch',     'Leftovers and bread', 'Pack up while eating')
+  ) as v(day, slot, meal, note) on true
+ where m.name = '[sample] Standard Weekend Camp';
+
+-- Meals for the hike
+insert into public.menu_meals (menu_id, day_number, meal_slot, name, notes)
+select m.id, v.day, v.slot, v.meal, v.note
+  from public.menus m
+  join (values
+      (1, 'Breakfast', 'Oats with hot water', 'No milk - carry powdered'),
+      (1, 'Lunch',     'Trail lunch',          'Eaten on the move'),
+      (1, 'Dinner',    'Pasta with tinned tomato', null),
+      (2, 'Breakfast', 'Oats and hot chocolate', null),
+      (2, 'Lunch',     'Trail lunch',          null)
+  ) as v(day, slot, meal, note) on true
+ where m.name = '[sample] Lightweight Hike';
+
+-- Meals for the day trip
+insert into public.menu_meals (menu_id, day_number, meal_slot, name, notes)
+select m.id, 1, v.slot, v.meal, null
+  from public.menus m
+  join (values
+      ('Lunch',           'Sandwiches and fruit'),
+      ('Afternoon snack', 'Marshmallows over the fire')
+  ) as v(slot, meal) on true
+ where m.name = '[sample] Day Trip';
+
+-- Ingredients. Note bread and milk appear in more than one meal on the
+-- weekend camp - the food list rolls them into one line.
+insert into public.menu_meal_items (meal_id, food_item_id, quantity)
+select ml.id, f.id, v.qty
+  from public.menu_meals ml
+  join public.menus mn on mn.id = ml.menu_id
+  join (values
+      ('[sample] Standard Weekend Camp', 'Porridge and coffee',        '[sample] Coffee',           300.0),
+      ('[sample] Standard Weekend Camp', 'Porridge and coffee',        '[sample] Milk',             2.0),
+      ('[sample] Standard Weekend Camp', 'Porridge and coffee',        '[sample] Sugar',            0.5),
+      ('[sample] Standard Weekend Camp', 'Sandwiches',                 '[sample] Bread',            4.0),
+      ('[sample] Standard Weekend Camp', 'Chicken potjie with rice',   '[sample] Rice',             3.0),
+      ('[sample] Standard Weekend Camp', 'Chicken potjie with rice',   '[sample] Chopped Tomatoes', 4.0),
+      ('[sample] Standard Weekend Camp', 'Chicken potjie with rice',   '[sample] Cooking Oil',      0.5),
+      ('[sample] Standard Weekend Camp', 'Eggs, boerewors and toast',  '[sample] Eggs',             24.0),
+      ('[sample] Standard Weekend Camp', 'Eggs, boerewors and toast',  '[sample] Boerewors',        3.0),
+      ('[sample] Standard Weekend Camp', 'Eggs, boerewors and toast',  '[sample] Bread',            2.0),
+      ('[sample] Standard Weekend Camp', 'Leftovers and bread',        '[sample] Bread',            2.0),
+      ('[sample] Standard Weekend Camp', 'Leftovers and bread',        '[sample] Milk',             1.0),
+
+      ('[sample] Lightweight Hike',      'Oats with hot water',        '[sample] Sugar',            0.3),
+      ('[sample] Lightweight Hike',      'Trail lunch',                '[sample] Bread',            2.0),
+      ('[sample] Lightweight Hike',      'Pasta with tinned tomato',   '[sample] Pasta',            1.5),
+      ('[sample] Lightweight Hike',      'Pasta with tinned tomato',   '[sample] Chopped Tomatoes', 4.0),
+      ('[sample] Lightweight Hike',      'Oats and hot chocolate',     '[sample] Hot Chocolate',    200.0),
+
+      ('[sample] Day Trip',              'Sandwiches and fruit',       '[sample] Bread',            4.0),
+      ('[sample] Day Trip',              'Marshmallows over the fire', '[sample] Marshmallows',     3.0)
+  ) as v(menu_name, meal_name, food_name, qty)
+    on v.menu_name = mn.name and v.meal_name = ml.name
+  join public.food_items f on f.name = v.food_name
+ where mn.event_id is null;
+
 commit;
 
 -- ---------------------------------------------------------------------
@@ -335,4 +422,10 @@ union all select 'event_equipment', count(*) from public.event_equipment
 union all select 'event_food',    count(*) from public.event_food
   where event_id in (select id from public.events where name like '[sample]%')
 union all select 'equipment_loans', count(*) from public.equipment_loans
-  where equipment_id in (select id from public.equipment where name like '[sample]%');
+  where equipment_id in (select id from public.equipment where name like '[sample]%')
+union all select 'menus (presets)', count(*) from public.menus where name like '[sample]%'
+union all select 'menu_meals',      count(*) from public.menu_meals
+  where menu_id in (select id from public.menus where name like '[sample]%')
+union all select 'menu_meal_items', count(*) from public.menu_meal_items
+  where meal_id in (select id from public.menu_meals
+                     where menu_id in (select id from public.menus where name like '[sample]%'));

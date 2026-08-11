@@ -1,6 +1,7 @@
 import { Navigate, Outlet, NavLink } from "react-router";
 import {
   CalendarDays,
+  ChefHat,
   HandCoins,
   LogOut,
   MapPin,
@@ -30,6 +31,7 @@ const navItems: { to: string; label: string; icon: typeof Package; roles?: Role[
   { to: "/loans", label: "Borrowed", icon: HandCoins },
   { to: "/events", label: "Calendar", icon: CalendarDays },
   { to: "/sites", label: "Sites", icon: MapPin },
+  { to: "/menus", label: "Menus", icon: ChefHat },
   { to: "/food", label: "Food", icon: ShoppingBasket },
   { to: "/users", label: "Users", icon: Users, roles: ["Admin"] },
 ];
