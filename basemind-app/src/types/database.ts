@@ -35,6 +35,26 @@ export type Equipment = {
 export type NewEquipment = Omit<Equipment, "id" | "created_at" | "updated_at">;
 export type EquipmentUpdate = Partial<NewEquipment>;
 
+export type EquipmentLoan = {
+  id: string;
+  equipment_id: string;
+  quantity: number;
+  borrower_name: string;
+  scout_group: string | null;
+  position: string | null;
+  phone: string | null;
+  email: string | null;
+  borrowed_on: string;
+  due_back: string | null;
+  /** Null while the item is still out. */
+  returned_on: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NewEquipmentLoan = Omit<EquipmentLoan, "id" | "created_at" | "updated_at">;
+
 export type CampingSite = {
   id: string;
   name: string;
@@ -111,6 +131,7 @@ export type Database = {
         Partial<UserProfile>
       >;
       equipment: TableDef<Equipment, NewEquipment, EquipmentUpdate>;
+      equipment_loans: TableDef<EquipmentLoan, NewEquipmentLoan>;
       camping_sites: TableDef<CampingSite, NewCampingSite>;
       events: TableDef<CampEvent, NewCampEvent>;
       event_equipment: TableDef<EventEquipment, NewEventEquipment>;

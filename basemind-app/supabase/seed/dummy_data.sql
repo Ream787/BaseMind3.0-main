@@ -19,6 +19,8 @@ begin;
 -- ---------------------------------------------------------------------
 -- Clear any previous run of this seed (child rows first for the FKs)
 -- ---------------------------------------------------------------------
+delete from public.equipment_loans
+  where equipment_id in (select id from public.equipment where name like '[sample]%');
 delete from public.event_food
   where event_id in (select id from public.events where name like '[sample]%');
 delete from public.event_equipment
@@ -270,6 +272,55 @@ select e.id, f.id, v.qty
   join public.food_items f on f.name = v.food_name
  where e.name = '[sample] Weekend Patrol Camp';
 
+-- ---------------------------------------------------------------------
+-- LOANS
+-- A spread of states: overdue, due in the next few days, out with plenty
+-- of time, out with no date set, and two already returned.
+-- ---------------------------------------------------------------------
+insert into public.equipment_loans
+  (equipment_id, quantity, borrower_name, scout_group, position, phone, email,
+   borrowed_on, due_back, returned_on, notes)
+select q.id, v.qty, v.borrower, v.grp, v.pos, v.phone, v.email,
+       v.borrowed, v.due, v.returned, v.notes
+  from (values
+      -- badly overdue
+      ('[sample] Dome Tent (2-man)', 2, 'Thabo Molefe', '1st Riverside', 'PL',
+       '082 555 0121', 'thabo.molefe@example.com',
+       current_date - 30, current_date - 9, null::date,
+       'Took two for a patrol hike. Chase this up.'),
+      -- due in a couple of days
+      ('[sample] Compass', 4, 'Lerato Dlamini', '1st Riverside', 'APL',
+       '083 555 0164', null,
+       current_date - 10, current_date + 2, null::date,
+       'Map and compass badge work.'),
+      -- borrowed by another group, plenty of time
+      ('[sample] Pioneering Pole (3m)', 8, 'Nadia Fourie', '3rd Hilltop', 'Scouter',
+       null, 'nadia.fourie@example.org',
+       current_date - 4, current_date + 21, null::date,
+       'Lending to the neighbouring group for their gateway build.'),
+      -- out with no return date agreed
+      ('[sample] Rugby Ball', 1, 'Sipho Khumalo', '1st Riverside', 'Scout',
+       '084 555 0199', null,
+       current_date - 6, null::date, null::date,
+       'No date agreed - just for troop nights.'),
+      -- parent, due next week
+      ('[sample] Cast Iron Potjie (no. 3)', 1, 'Marius van Wyk', '1st Riverside', 'Parent',
+       '079 555 0107', 'mvanwyk@example.com',
+       current_date - 2, current_date + 8, null::date,
+       'Borrowed for a group fundraiser braai.'),
+      -- already returned, on time
+      ('[sample] Bow Saw', 2, 'Thabo Molefe', '1st Riverside', 'PL',
+       '082 555 0121', 'thabo.molefe@example.com',
+       current_date - 60, current_date - 50, current_date - 52,
+       'Returned early, all good.'),
+      -- already returned, but late
+      ('[sample] Gas Stove (2-burner)', 1, 'Nadia Fourie', '3rd Hilltop', 'Scouter',
+       null, 'nadia.fourie@example.org',
+       current_date - 80, current_date - 70, current_date - 64,
+       'Came back late and with the dodgy regulator.')
+  ) as v(item_name, qty, borrower, grp, pos, phone, email, borrowed, due, returned, notes)
+  join public.equipment q on q.name = v.item_name;
+
 commit;
 
 -- ---------------------------------------------------------------------
@@ -282,4 +333,6 @@ union all select 'events',        count(*) from public.events        where name 
 union all select 'event_equipment', count(*) from public.event_equipment
   where event_id in (select id from public.events where name like '[sample]%')
 union all select 'event_food',    count(*) from public.event_food
-  where event_id in (select id from public.events where name like '[sample]%');
+  where event_id in (select id from public.events where name like '[sample]%')
+union all select 'equipment_loans', count(*) from public.equipment_loans
+  where equipment_id in (select id from public.equipment where name like '[sample]%');

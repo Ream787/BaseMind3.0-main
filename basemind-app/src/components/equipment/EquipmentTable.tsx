@@ -1,6 +1,7 @@
-import { Pencil, Trash2 } from "lucide-react";
+import { HandCoins, Pencil, Trash2 } from "lucide-react";
 
-import type { Equipment, EquipmentCondition } from "@/types/database";
+import type { Equipment, EquipmentCondition, EquipmentLoan } from "@/types/database";
+import { availableQuantity, onLoanQuantity } from "@/lib/loans";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,19 +24,23 @@ const conditionStyles: Record<EquipmentCondition, string> = {
 interface EquipmentTableProps {
   items: Equipment[];
   usersById: Map<string, string>;
+  loans: EquipmentLoan[];
   canEdit: boolean;
   canDelete: boolean;
   onEdit: (equipment: Equipment) => void;
   onDelete: (equipment: Equipment) => void;
+  onLend: (equipment: Equipment) => void;
 }
 
 export function EquipmentTable({
   items,
   usersById,
+  loans,
   canEdit,
   canDelete,
   onEdit,
   onDelete,
+  onLend,
 }: EquipmentTableProps) {
   if (items.length === 0) {
     return (
@@ -53,6 +58,7 @@ export function EquipmentTable({
             <TableHead>Name</TableHead>
             <TableHead>Category</TableHead>
             <TableHead>Qty</TableHead>
+            <TableHead>Available</TableHead>
             <TableHead>Location</TableHead>
             <TableHead>Condition</TableHead>
             <TableHead>Checked by</TableHead>
@@ -61,11 +67,23 @@ export function EquipmentTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {items.map((item) => (
+          {items.map((item) => {
+            const out = onLoanQuantity(item.id, loans);
+            const available = availableQuantity(item, loans);
+            return (
             <TableRow key={item.id}>
               <TableCell className="font-medium">{item.name}</TableCell>
               <TableCell className="text-muted-foreground">{item.category || "—"}</TableCell>
               <TableCell>{item.quantity}</TableCell>
+              <TableCell>
+                {out === 0 ? (
+                  <span className="text-muted-foreground">All in</span>
+                ) : (
+                  <span className={available === 0 ? "text-destructive" : undefined}>
+                    {available} free · {out} out
+                  </span>
+                )}
+              </TableCell>
               <TableCell>{item.location}</TableCell>
               <TableCell>
                 <Badge variant="outline" className={conditionStyles[item.condition]}>
@@ -79,6 +97,18 @@ export function EquipmentTable({
               {(canEdit || canDelete) && (
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
+                    {canEdit && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onLend(item)}
+                        disabled={available === 0}
+                        aria-label={`Lend ${item.name}`}
+                        title={available === 0 ? "All of these are out on loan" : `Lend ${item.name}`}
+                      >
+                        <HandCoins className="size-4" />
+                      </Button>
+                    )}
                     {canEdit && (
                       <Button variant="ghost" size="icon" onClick={() => onEdit(item)} aria-label={`Edit ${item.name}`}>
                         <Pencil className="size-4" />
@@ -98,7 +128,8 @@ export function EquipmentTable({
                 </TableCell>
               )}
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
       </Table>
     </div>

@@ -28,7 +28,9 @@ import {
 import { EquipmentTable } from "@/components/equipment/EquipmentTable";
 import { EquipmentFormDialog } from "@/components/equipment/EquipmentFormDialog";
 import { EquipmentGroupGrid } from "@/components/equipment/EquipmentGroupGrid";
+import { LoanFormDialog } from "@/components/loans/LoanFormDialog";
 import { groupKeyFor, type GroupBy } from "@/lib/groupEquipment";
+import { useRealtimeTable } from "@/lib/useRealtimeTable";
 
 const CONDITION_FILTERS: (EquipmentCondition | "All")[] = [
   "All",
@@ -63,6 +65,10 @@ export function EquipmentPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Equipment | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Equipment | null>(null);
+  const [lendOpen, setLendOpen] = useState(false);
+  const [lendItemId, setLendItemId] = useState<string | undefined>();
+
+  const { rows: loans } = useRealtimeTable("equipment_loans");
 
   const canEdit = hasRole(["Admin", "Manager", "Member"]);
   const canDelete = hasRole(["Admin", "Manager"]);
@@ -119,6 +125,11 @@ export function EquipmentPage() {
   function openEditDialog(item: Equipment) {
     setEditingItem(item);
     setDialogOpen(true);
+  }
+
+  function openLendDialog(item: Equipment) {
+    setLendItemId(item.id);
+    setLendOpen(true);
   }
 
   async function confirmDelete() {
@@ -225,10 +236,12 @@ export function EquipmentPage() {
         <EquipmentTable
           items={visibleItems}
           usersById={usersById}
+          loans={loans}
           canEdit={canEdit}
           canDelete={canDelete}
           onEdit={openEditDialog}
           onDelete={setDeleteTarget}
+          onLend={openLendDialog}
         />
       )}
 
@@ -239,6 +252,14 @@ export function EquipmentPage() {
         categories={categories}
         locations={locations}
         users={users}
+      />
+
+      <LoanFormDialog
+        open={lendOpen}
+        onOpenChange={setLendOpen}
+        equipment={equipment}
+        loans={loans}
+        presetEquipmentId={lendItemId}
       />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
