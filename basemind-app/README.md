@@ -113,6 +113,19 @@ To check the signup trigger created your profile row correctly:
 select id, email, role, status from public.users;
 ```
 
+### 8. Optional: load sample data
+
+To see the app with something in it, run
+[`supabase/seed/dummy_data.sql`](./supabase/seed/dummy_data.sql) in the SQL Editor. It adds
+fictional equipment across four rooms and six categories, four camping sites, a food store, and
+five events — one past, one running now, three upcoming — two of which have full packing lists
+and food plans.
+
+Every seeded row is named with a `[sample]` prefix. Re-running the file replaces its own rows
+rather than duplicating them, and
+[`supabase/seed/remove_dummy_data.sql`](./supabase/seed/remove_dummy_data.sql) removes all of it
+without touching anything you added yourself.
+
 ## Deploying (GitHub + Vercel)
 
 1. **Push to GitHub.** From `basemind-app/`:
