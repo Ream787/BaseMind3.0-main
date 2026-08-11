@@ -1,5 +1,14 @@
 import { Navigate, Outlet, NavLink } from "react-router";
-import { LogOut, Package, Users, Moon, Sun } from "lucide-react";
+import {
+  CalendarDays,
+  LogOut,
+  MapPin,
+  Moon,
+  Package,
+  ShoppingBasket,
+  Sun,
+  Users,
+} from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -17,6 +26,9 @@ import type { Role } from "@/types/database";
 
 const navItems: { to: string; label: string; icon: typeof Package; roles?: Role[] }[] = [
   { to: "/equipment", label: "Equipment", icon: Package },
+  { to: "/events", label: "Calendar", icon: CalendarDays },
+  { to: "/sites", label: "Sites", icon: MapPin },
+  { to: "/food", label: "Food", icon: ShoppingBasket },
   { to: "/users", label: "Users", icon: Users, roles: ["Admin"] },
 ];
 

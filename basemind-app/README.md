@@ -1,17 +1,25 @@
-# BaseMind — Equipment Tracker
+# BaseMind
 
-A single-group Scout equipment tracker with role-based access control. Rebuilt from scratch,
-deliberately scoped to exactly two things: **who can do what**, and **the equipment list**.
-Nothing else.
+Equipment, camp and food management for a single Scout group, with role-based access control.
+
+## What it does
+
+- **Equipment** — inventory browsable by room or by category, with condition tracking
+- **Calendar** — camps, hikes and meetings on a month view, plus what's coming up
+- **Camping sites** — a directory of venues with phone numbers, addresses and descriptions
+- **Food store** — what's in the cupboard, in whatever units suit (kg, tins, litres)
+- **Camp plans** — per-event equipment packing lists and food requirements, with a shopping
+  list worked out automatically from what the food store doesn't already cover
+- **PDF export** — the whole camp plan, site contact details included, as a printable download
 
 ## Stack
 
 React 18 + TypeScript + Vite + Tailwind CSS v4 + Radix/shadcn UI components, backed by Supabase
-(Postgres + Auth + Row Level Security + Realtime).
+(Postgres + Auth + Row Level Security + Realtime). PDF generation via jsPDF, loaded on demand.
 
 ## Roles
 
-| Role | Equipment | Users |
+| Role | Equipment, camps, sites, food | Users |
 |---|---|---|
 | **Admin** | full CRUD | approve/reject signups, change roles, deactivate |
 | **Manager** | full CRUD | — |
@@ -19,8 +27,8 @@ React 18 + TypeScript + Vite + Tailwind CSS v4 + Radix/shadcn UI components, bac
 | **Viewer** | read-only | — |
 
 Access is enforced **in the database** via Postgres Row Level Security, not just hidden in the
-UI — see `supabase/migrations/0001_init.sql`. A Viewer (or a Pending account) cannot write to the
-`equipment` table even by calling the Supabase REST API directly.
+UI — see `supabase/migrations/`. A Viewer (or a Pending account) cannot write to any table even
+by calling the Supabase REST API directly.
 
 ## Setup
 
@@ -38,11 +46,16 @@ Create a new project at [supabase.com](https://supabase.com/dashboard). You'll n
 ### 3. Run the schema
 
 Open the SQL Editor in your Supabase project and run the migrations in
-[`supabase/migrations/`](./supabase/migrations/) in order, once each. `0001_init.sql` creates the
-`users` and `equipment` tables, the signup trigger, and all RLS policies.
+[`supabase/migrations/`](./supabase/migrations/) **in order, once each**:
 
-If you set up before `0002` existed, run `0002_fix_admin_bootstrap.sql` too — without it the
-first-admin promotion in step 7 silently does nothing.
+| Migration | What it adds |
+|---|---|
+| `0001_init.sql` | `users` and `equipment` tables, signup trigger, RLS policies |
+| `0002_fix_admin_bootstrap.sql` | Lets the first-admin promotion in step 7 actually apply |
+| `0003_camps_and_food.sql` | Camping sites, events, packing lists, food store, camp food plans |
+
+If you already set the project up, run whichever ones you haven't yet — the app's calendar,
+sites and food pages will error until `0003` has been applied.
 
 (If you're using the Supabase CLI locally instead: `supabase link` then `supabase db push`.)
 

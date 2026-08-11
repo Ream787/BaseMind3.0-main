@@ -35,21 +35,87 @@ export type Equipment = {
 export type NewEquipment = Omit<Equipment, "id" | "created_at" | "updated_at">;
 export type EquipmentUpdate = Partial<NewEquipment>;
 
+export type CampingSite = {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  description: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NewCampingSite = Omit<CampingSite, "id" | "created_at" | "updated_at">;
+
+export type CampEvent = {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string | null;
+  site_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NewCampEvent = Omit<CampEvent, "id" | "created_at" | "updated_at">;
+
+export type EventEquipment = {
+  id: string;
+  event_id: string;
+  equipment_id: string;
+  quantity: number;
+  created_at: string;
+};
+
+export type NewEventEquipment = Omit<EventEquipment, "id" | "created_at">;
+
+export type FoodItem = {
+  id: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  category: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NewFoodItem = Omit<FoodItem, "id" | "created_at" | "updated_at">;
+
+export type EventFood = {
+  id: string;
+  event_id: string;
+  food_item_id: string;
+  quantity: number;
+  created_at: string;
+};
+
+export type NewEventFood = Omit<EventFood, "id" | "created_at">;
+
+type TableDef<Row, Insert, Update = Partial<Insert>> = {
+  Row: Row;
+  Insert: Insert;
+  Update: Update;
+  Relationships: [];
+};
+
 export type Database = {
   public: {
     Tables: {
-      users: {
-        Row: UserProfile;
-        Insert: Partial<UserProfile> & Pick<UserProfile, "id" | "email">;
-        Update: Partial<UserProfile>;
-        Relationships: [];
-      };
-      equipment: {
-        Row: Equipment;
-        Insert: NewEquipment;
-        Update: EquipmentUpdate;
-        Relationships: [];
-      };
+      users: TableDef<
+        UserProfile,
+        Partial<UserProfile> & Pick<UserProfile, "id" | "email">,
+        Partial<UserProfile>
+      >;
+      equipment: TableDef<Equipment, NewEquipment, EquipmentUpdate>;
+      camping_sites: TableDef<CampingSite, NewCampingSite>;
+      events: TableDef<CampEvent, NewCampEvent>;
+      event_equipment: TableDef<EventEquipment, NewEventEquipment>;
+      food_items: TableDef<FoodItem, NewFoodItem>;
+      event_food: TableDef<EventFood, NewEventFood>;
     };
     Views: { [_ in never]: never };
     Functions: { [_ in never]: never };
