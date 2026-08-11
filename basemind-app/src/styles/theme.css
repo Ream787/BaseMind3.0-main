@@ -1,0 +1,178 @@
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 16px;
+  --background: #faf9fc;
+  --foreground: #1a1625;
+  --card: #ffffff;
+  --card-foreground: #1a1625;
+  --popover: #ffffff;
+  --popover-foreground: #1a1625;
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f0ff;
+  --secondary-foreground: #5b21b6;
+  --muted: #f0edf5;
+  --muted-foreground: #6b7280;
+  --accent: #ede9fe;
+  --accent-foreground: #5b21b6;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #e5e1ee;
+  --input: transparent;
+  --input-background: #f5f3f8;
+  --switch-background: #c4b5d4;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: #7c3aed;
+  --chart-1: #7c3aed;
+  --chart-2: #06b6d4;
+  --chart-3: #f59e0b;
+  --chart-4: #10b981;
+  --chart-5: #ef4444;
+  --radius: 0.625rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1a1625;
+  --sidebar-primary: #7c3aed;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f3f0ff;
+  --sidebar-accent-foreground: #5b21b6;
+  --sidebar-border: #e5e1ee;
+  --sidebar-ring: #7c3aed;
+}
+
+.dark {
+  --background: #0f0b1a;
+  --foreground: #e8e0f0;
+  --card: #1a1428;
+  --card-foreground: #e8e0f0;
+  --popover: #1a1428;
+  --popover-foreground: #e8e0f0;
+  --primary: #a78bfa;
+  --primary-foreground: #0f0b1a;
+  --secondary: #2d2140;
+  --secondary-foreground: #c4b5fd;
+  --muted: #251d35;
+  --muted-foreground: #9ca3af;
+  --accent: #2d2140;
+  --accent-foreground: #c4b5fd;
+  --destructive: #b91c1c;
+  --destructive-foreground: #fecaca;
+  --border: #2d2140;
+  --input: #2d2140;
+  --input-background: #251d35;
+  --switch-background: #4c3d6b;
+  --ring: #a78bfa;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --chart-1: #a78bfa;
+  --chart-2: #22d3ee;
+  --chart-3: #fbbf24;
+  --chart-4: #34d399;
+  --chart-5: #f87171;
+  --sidebar: #1a1428;
+  --sidebar-foreground: #e8e0f0;
+  --sidebar-primary: #a78bfa;
+  --sidebar-primary-foreground: #0f0b1a;
+  --sidebar-accent: #2d2140;
+  --sidebar-accent-foreground: #c4b5fd;
+  --sidebar-border: #2d2140;
+  --sidebar-ring: #a78bfa;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  h1 {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h2 {
+    font-size: var(--text-xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h3 {
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h4 {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  label {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  button {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  input {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.5;
+  }
+}
