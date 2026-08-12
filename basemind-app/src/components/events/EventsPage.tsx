@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { format, isSameDay, isSameMonth, isToday, parseISO } from "date-fns";
-import { CalendarDays, ChevronLeft, ChevronRight, MapPin, Plus } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, MapPin, Plus, Sparkles } from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
@@ -55,10 +55,20 @@ export function EventsPage() {
           </p>
         </div>
         {canEdit && (
-          <Button onClick={() => openAdd()}>
-            <Plus className="size-4" />
-            Add event
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {/* The wizard is for camps, where site/menu/equipment all matter.
+                Quick add stays for troop nights and one-off dates. */}
+            <Button asChild>
+              <Link to="/events/new">
+                <Sparkles className="size-4" />
+                Plan a camp
+              </Link>
+            </Button>
+            <Button variant="outline" onClick={() => openAdd()}>
+              <Plus className="size-4" />
+              Quick add
+            </Button>
+          </div>
         )}
       </div>
 
