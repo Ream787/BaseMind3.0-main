@@ -18,38 +18,81 @@ export type FoodPlanLine = {
   category: string | null;
   /** How much the camp needs. */
   needed: number;
-  /** How much is currently in the food store. */
+  /** How much is in the food store in total. */
   inStock: number;
-  /** Shortfall to buy; 0 when stock already covers it. */
+  /** How much of that stock other upcoming camps have already claimed. */
+  claimedElsewhere: number;
+  /** Which camps claimed it, for explaining the number. */
+  claimedBy: string[];
+  /** Stock this camp can actually count on: inStock - claimedElsewhere. */
+  availableToUs: number;
+  /** Shortfall to buy; 0 when available stock already covers it. */
   toBuy: number;
 };
 
 /**
- * Joins a camp's food requirements against the food store.
+ * What other camps have already committed, per food item.
+ *
+ * Without this, two camps a fortnight apart each see the full cupboard and
+ * neither shopping list mentions the bread the other one is taking.
+ */
+export type StockClaim = { quantity: number; byEvent: string[] };
+
+export function buildClaims(
+  otherRequirements: { eventName: string; food_item_id: string; quantity: number }[],
+): Map<string, StockClaim> {
+  const claims = new Map<string, StockClaim>();
+  for (const req of otherRequirements) {
+    const existing = claims.get(req.food_item_id);
+    if (existing) {
+      existing.quantity = roundQuantity(existing.quantity + req.quantity);
+      if (!existing.byEvent.includes(req.eventName)) existing.byEvent.push(req.eventName);
+    } else {
+      claims.set(req.food_item_id, {
+        quantity: roundQuantity(req.quantity),
+        byEvent: [req.eventName],
+      });
+    }
+  }
+  return claims;
+}
+
+/**
+ * Joins a camp's food requirements against the food store, minus anything
+ * other upcoming camps have already spoken for.
  *
  * Requirements whose food item no longer exists are skipped rather than shown
  * as nameless rows — the DB cascade should prevent it, but a stale realtime
  * payload can briefly leave one behind.
  */
-export function buildFoodPlan(requirements: FoodRequirement[], stock: FoodItem[]): FoodPlanLine[] {
+export function buildFoodPlan(
+  requirements: FoodRequirement[],
+  stock: FoodItem[],
+  claims: Map<string, StockClaim> = new Map(),
+): FoodPlanLine[] {
   const stockById = new Map(stock.map((item) => [item.id, item]));
 
   return requirements
     .map((req) => {
       const item = stockById.get(req.food_item_id);
       if (!item) return null;
-      const needed = req.quantity;
-      const inStock = item.quantity;
+      const claim = claims.get(item.id);
+      const claimedElsewhere = claim?.quantity ?? 0;
+      // Can't rely on more than exists, even if claims exceed the shelf.
+      const availableToUs = Math.max(0, roundQuantity(item.quantity - claimedElsewhere));
       return {
         eventFoodId: req.id,
         foodItemId: item.id,
         name: item.name,
         unit: item.unit,
         category: item.category,
-        needed,
-        inStock,
+        needed: req.quantity,
+        inStock: item.quantity,
+        claimedElsewhere,
+        claimedBy: claim?.byEvent ?? [],
+        availableToUs,
         // Rounded to shake off float noise like 0.30000000000000004
-        toBuy: Math.max(0, roundQuantity(needed - inStock)),
+        toBuy: Math.max(0, roundQuantity(req.quantity - availableToUs)),
       };
     })
     .filter((line): line is FoodPlanLine => line !== null)

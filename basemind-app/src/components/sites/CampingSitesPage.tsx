@@ -36,6 +36,12 @@ const emptyForm = {
   address: "",
   description: "",
   notes: "",
+  hospital_name: "",
+  hospital_phone: "",
+  hospital_address: "",
+  hospital_distance: "",
+  emergency_access: "",
+  emergency_notes: "",
 };
 
 export function CampingSitesPage() {
@@ -63,6 +69,12 @@ export function CampingSitesPage() {
             address: editing.address ?? "",
             description: editing.description ?? "",
             notes: editing.notes ?? "",
+            hospital_name: editing.hospital_name ?? "",
+            hospital_phone: editing.hospital_phone ?? "",
+            hospital_address: editing.hospital_address ?? "",
+            hospital_distance: editing.hospital_distance ?? "",
+            emergency_access: editing.emergency_access ?? "",
+            emergency_notes: editing.emergency_notes ?? "",
           }
         : emptyForm,
     );
@@ -86,6 +98,12 @@ export function CampingSitesPage() {
       address: form.address.trim() || null,
       description: form.description.trim() || null,
       notes: form.notes.trim() || null,
+      hospital_name: form.hospital_name.trim() || null,
+      hospital_phone: form.hospital_phone.trim() || null,
+      hospital_address: form.hospital_address.trim() || null,
+      hospital_distance: form.hospital_distance.trim() || null,
+      emergency_access: form.emergency_access.trim() || null,
+      emergency_notes: form.emergency_notes.trim() || null,
     };
 
     const { error: saveError } = editing
@@ -289,6 +307,69 @@ export function CampingSitesPage() {
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
               />
+            </div>
+
+            <div className="flex flex-col gap-4 border-t pt-4">
+              <div>
+                <h3 className="text-sm font-medium">Emergency details</h3>
+                <p className="text-sm text-muted-foreground">
+                  Used on safety plans. Check these yourself — nothing here is looked up.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="site-hospital">Nearest hospital</Label>
+                <Input
+                  id="site-hospital"
+                  value={form.hospital_name}
+                  onChange={(e) => setForm({ ...form, hospital_name: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="site-hospital-phone">Hospital phone</Label>
+                  <Input
+                    id="site-hospital-phone"
+                    type="tel"
+                    value={form.hospital_phone}
+                    onChange={(e) => setForm({ ...form, hospital_phone: e.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="site-hospital-distance">How far</Label>
+                  <Input
+                    id="site-hospital-distance"
+                    placeholder="20 km, about 25 min"
+                    value={form.hospital_distance}
+                    onChange={(e) => setForm({ ...form, hospital_distance: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="site-hospital-address">Hospital address</Label>
+                <Input
+                  id="site-hospital-address"
+                  value={form.hospital_address}
+                  onChange={(e) => setForm({ ...form, hospital_address: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="site-access">Emergency vehicle access</Label>
+                <Input
+                  id="site-access"
+                  placeholder="Where an ambulance should meet you"
+                  value={form.emergency_access}
+                  onChange={(e) => setForm({ ...form, emergency_access: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="site-emergency-notes">Emergency notes</Label>
+                <Textarea
+                  id="site-emergency-notes"
+                  placeholder="No signal in the valley, gate locked after 22h00…"
+                  value={form.emergency_notes}
+                  onChange={(e) => setForm({ ...form, emergency_notes: e.target.value })}
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>

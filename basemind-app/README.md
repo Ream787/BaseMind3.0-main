@@ -14,7 +14,33 @@ Equipment, camp and food management for a single Scout group, with role-based ac
   length and type (2-day hiking, weekend camping…) and reuse them, scaled to the group size
 - **Camp plans** — per-event equipment packing lists and food requirements, with a shopping
   list worked out automatically from what the food store doesn't already cover
+- **Camp wizard** — set a new camp up in one pass: dates, site, headcount, menu, equipment
+- **Safety plans** — emergency contacts, nearest hospital, and what to do per situation, written
+  up as a printable document
 - **PDF export** — the whole camp plan, site contact details included, as a printable download
+- **Form filling** — upload an official fillable PDF once, map its boxes to camp data, then
+  generate filled copies per camp
+
+## Safety plans and the AI rewrite
+
+The safety plan is built from what you type in — nothing is looked up, inferred or supplied by
+the app. The default document is rendered by a plain template, so it works with no API key and
+can only ever restate your own data.
+
+There is also an optional **"Rewrite more readably"** button that sends those same facts to
+Gemini to be phrased as flowing paragraphs. It is constrained in three ways:
+
+1. The API key lives in a Supabase Edge Function, never in the browser bundle.
+2. The model is told to use only the supplied facts and invent nothing.
+3. That instruction is **not trusted** — every number in the reply is checked against your data
+   before it is shown, and a reply containing an unrecognised number is discarded rather than
+   displayed. You keep the plain version.
+
+To enable it: Supabase dashboard → Edge Functions → create a function named `safety-plan`, paste
+[`supabase/functions/safety-plan/index.ts`](./supabase/functions/safety-plan/index.ts), and set a
+`GEMINI_API_KEY` secret. Without it the button simply errors and the template still works.
+
+Whatever produces it, read the plan before you rely on it.
 
 ## Stack
 
@@ -59,6 +85,8 @@ Open the SQL Editor in your Supabase project and run the migrations in
 | `0003_camps_and_food.sql` | Camping sites, events, packing lists, food store, camp food plans |
 | `0004_equipment_loans.sql` | Borrowing: who has what, and when it's due back |
 | `0005_menus.sql` | Menus, meals and ingredients, plus event headcount |
+| `0006_safety.sql` | Hospital/emergency details per site, and per-camp safety plans |
+| `0007_camp_forms.sql` | Uploaded fillable PDF forms and their field mappings |
 
 If you already set the project up, run whichever ones you haven't yet — the app's calendar,
 sites and food pages will error until `0003` has been applied.

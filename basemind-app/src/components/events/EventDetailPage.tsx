@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, Navigate, useParams } from "react-router";
+import { Link, Navigate, useNavigate, useParams } from "react-router";
 import {
   ArrowLeft,
   CalendarDays,
@@ -16,7 +16,8 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
-import { buildFoodPlan, roundQuantity, toShoppingList } from "@/lib/shoppingList";
+import { buildClaims, buildFoodPlan, roundQuantity, toShoppingList } from "@/lib/shoppingList";
+import { todayISO } from "@/lib/loans";
 import { aggregateMenuRequirements, mealsByDay, mergeRequirements } from "@/lib/menus";
 import { downloadCampPlanPdf, formatDateRange } from "@/lib/campPlanPdf";
 import { EventMenuSection } from "@/components/menus/EventMenuSection";
@@ -38,10 +39,22 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import { EventFormDialog } from "@/components/events/EventFormDialog";
+import { SafetyPlanSection } from "@/components/safety/SafetyPlanSection";
 
 export function EventDetailPage() {
   const { eventId } = useParams();
+  const navigate = useNavigate();
   const { hasRole } = useAuth();
 
   const { rows: events, loading: eventsLoading } = useRealtimeTable("events");
@@ -53,6 +66,8 @@ export function EventDetailPage() {
   const { rows: allMenus } = useRealtimeTable("menus", { orderBy: "name" });
   const { rows: allMeals } = useRealtimeTable("menu_meals");
   const { rows: allMealItems } = useRealtimeTable("menu_meal_items");
+  const { rows: safetyPlans } = useRealtimeTable("safety_plans");
+  const { rows: safetyScenarios } = useRealtimeTable("safety_scenarios");
 
   const [editOpen, setEditOpen] = useState(false);
   const [addEquipmentId, setAddEquipmentId] = useState("");
@@ -60,6 +75,8 @@ export function EventDetailPage() {
   const [addFoodId, setAddFoodId] = useState("");
   const [addFoodQty, setAddFoodQty] = useState("1");
   const [exporting, setExporting] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const canEdit = hasRole(["Admin", "Manager", "Member"]);
   const canDelete = hasRole(["Admin", "Manager"]);
@@ -87,6 +104,14 @@ export function EventDetailPage() {
     [allMenus, eventId],
   );
   const menuPresets = useMemo(() => allMenus.filter((m) => m.event_id === null), [allMenus]);
+  const safetyPlan = useMemo(
+    () => safetyPlans.find((p) => p.event_id === eventId) ?? null,
+    [safetyPlans, eventId],
+  );
+  const planScenarios = useMemo(
+    () => (safetyPlan ? safetyScenarios.filter((s) => s.safety_plan_id === safetyPlan.id) : []),
+    [safetyScenarios, safetyPlan],
+  );
   const menuMeals = useMemo(
     () => (menu ? allMeals.filter((m) => m.menu_id === menu.id) : []),
     [allMeals, menu],
@@ -96,14 +121,39 @@ export function EventDetailPage() {
     [allMealItems, menuMeals],
   );
 
-  // The camp menu's quantities are already scaled at the point it was
-  // applied, so no further scaling here — just roll the meals up and add
-  // anything entered by hand on top.
+  // Stock other upcoming camps have already spoken for. Past camps release
+  // their claim — their food has been eaten, or was never bought.
+  const claims = useMemo(() => {
+    const today = todayISO();
+    const upcomingOthers = events.filter(
+      (e) => e.id !== eventId && (e.end_date ?? e.start_date) >= today,
+    );
+
+    const otherRequirements = upcomingOthers.flatMap((other) => {
+      const otherMenu = allMenus.find((m) => m.event_id === other.id);
+      const otherMeals = otherMenu ? allMeals.filter((m) => m.menu_id === otherMenu.id) : [];
+      const otherItems = allMealItems.filter((i) => otherMeals.some((m) => m.id === i.meal_id));
+      const fromMenu = aggregateMenuRequirements(otherMeals, otherItems);
+      const manual = eventFood.filter((row) => row.event_id === other.id);
+
+      return mergeRequirements(fromMenu, manual).map((req) => ({
+        eventName: other.name,
+        food_item_id: req.food_item_id,
+        quantity: req.quantity,
+      }));
+    });
+
+    return buildClaims(otherRequirements);
+  }, [events, eventId, allMenus, allMeals, allMealItems, eventFood]);
+
+  // The camp menu's quantities were already scaled when the menu was applied,
+  // so no further scaling here — roll the meals up, add anything entered by
+  // hand, then measure against stock other camps haven't already claimed.
   const foodPlan = useMemo(() => {
     const fromMenu = aggregateMenuRequirements(menuMeals, menuItems);
     const manual = eventFood.filter((row) => row.event_id === eventId);
-    return buildFoodPlan(mergeRequirements(fromMenu, manual), foodStock);
-  }, [menuMeals, menuItems, eventFood, eventId, foodStock]);
+    return buildFoodPlan(mergeRequirements(fromMenu, manual), foodStock, claims);
+  }, [menuMeals, menuItems, eventFood, eventId, foodStock, claims]);
 
   const shopping = useMemo(() => toShoppingList(foodPlan), [foodPlan]);
 
@@ -189,6 +239,18 @@ export function EventDetailPage() {
     if (error) toast.error(error.message);
   }
 
+  async function deleteEvent() {
+    setDeleting(true);
+    const { error } = await supabase.from("events").delete().eq("id", event!.id);
+    setDeleting(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(`${event!.name} deleted`);
+    navigate("/events", { replace: true });
+  }
+
   async function exportPdf() {
     setExporting(true);
     try {
@@ -258,6 +320,15 @@ export function EventDetailPage() {
             <Button variant="outline" onClick={() => setEditOpen(true)}>
               <Pencil className="size-4" />
               Edit
+            </Button>
+          )}
+          {canDelete && (
+            <Button
+              variant="outline"
+              aria-label="Delete camp"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="size-4" />
             </Button>
           )}
         </div>
@@ -448,7 +519,7 @@ export function EventDetailPage() {
                 <TableRow>
                   <TableHead>Item</TableHead>
                   <TableHead className="w-32">Needed</TableHead>
-                  <TableHead>In store</TableHead>
+                  <TableHead>Available</TableHead>
                   <TableHead>To buy</TableHead>
                   {canEdit && <TableHead className="text-right">Remove</TableHead>}
                 </TableRow>
@@ -487,7 +558,16 @@ export function EventDetailPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {roundQuantity(line.inStock)} {line.unit}
+                      {roundQuantity(line.availableToUs)} {line.unit}
+                      {line.claimedElsewhere > 0 && (
+                        <span
+                          className="block text-xs"
+                          title={`${roundQuantity(line.inStock)} ${line.unit} in the store; ${roundQuantity(line.claimedElsewhere)} claimed by ${line.claimedBy.join(", ")}`}
+                        >
+                          {roundQuantity(line.claimedElsewhere)} claimed by{" "}
+                          {line.claimedBy.join(", ")}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {line.toBuy > 0 ? (
@@ -546,6 +626,14 @@ export function EventDetailPage() {
         </section>
       )}
 
+      <SafetyPlanSection
+        event={event}
+        site={site}
+        plan={safetyPlan}
+        scenarios={planScenarios}
+        canEdit={canEdit}
+      />
+
       <EventFormDialog
         open={editOpen}
         onOpenChange={setEditOpen}
@@ -553,11 +641,24 @@ export function EventDetailPage() {
         sites={sites}
       />
 
-      {canDelete && (
-        <p className="text-xs text-muted-foreground">
-          Deleting this event also clears its equipment and food lists.
-        </p>
-      )}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {event.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Its menu, packing list and food plan go with it, and any food it had claimed is
+              released back to other camps. Equipment, sites and the food store are untouched.
+              This can&apos;t be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={deleteEvent} disabled={deleting}>
+              {deleting ? "Deleting…" : "Delete camp"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

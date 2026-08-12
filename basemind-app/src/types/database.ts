@@ -63,9 +63,62 @@ export type CampingSite = {
   address: string | null;
   description: string | null;
   notes: string | null;
+  hospital_name: string | null;
+  hospital_phone: string | null;
+  hospital_address: string | null;
+  hospital_distance: string | null;
+  emergency_notes: string | null;
+  emergency_access: string | null;
   created_at: string;
   updated_at: string;
 };
+
+export type SafetyPlan = {
+  id: string;
+  event_id: string;
+  leader_in_charge: string | null;
+  leader_phone: string | null;
+  standby_name: string | null;
+  standby_phone: string | null;
+  first_aider_name: string | null;
+  first_aider_phone: string | null;
+  emergency_number: string | null;
+  ambulance_number: string | null;
+  extra_notes: string | null;
+  generated_text: string | null;
+  generated_at: string | null;
+  generated_by: "template" | "gemini" | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NewSafetyPlan = Omit<SafetyPlan, "id" | "created_at" | "updated_at">;
+
+export type SafetyScenario = {
+  id: string;
+  safety_plan_id: string;
+  scenario: string;
+  response: string;
+  destination: string | null;
+  contact_phone: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type NewSafetyScenario = Omit<SafetyScenario, "id" | "created_at">;
+
+export type CampForm = {
+  id: string;
+  name: string;
+  description: string | null;
+  storage_path: string;
+  /** Maps the PDF's own field names to BaseMind data keys. */
+  field_map: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NewCampForm = Omit<CampForm, "id" | "created_at" | "updated_at">;
 
 export type NewCampingSite = Omit<CampingSite, "id" | "created_at" | "updated_at">;
 
@@ -180,6 +233,9 @@ export type Database = {
       menus: TableDef<Menu, NewMenu>;
       menu_meals: TableDef<MenuMeal, NewMenuMeal>;
       menu_meal_items: TableDef<MenuMealItem, NewMenuMealItem>;
+      safety_plans: TableDef<SafetyPlan, NewSafetyPlan>;
+      safety_scenarios: TableDef<SafetyScenario, NewSafetyScenario>;
+      camp_forms: TableDef<CampForm, NewCampForm>;
     };
     Views: { [_ in never]: never };
     Functions: {
