@@ -17,6 +17,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { OfflineBanner } from "@/components/layout/OfflineBanner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -120,6 +121,7 @@ export function AppLayout() {
           </DropdownMenu>
         </div>
       </header>
+      <OfflineBanner />
       <main className="flex-1 p-6">
         <Outlet />
       </main>

@@ -14,7 +14,8 @@ import {
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
-import { useAuth } from "@/context/AuthContext";
+import { useOffline } from "@/context/OfflineContext";
+import { useWritePermissions } from "@/lib/useWritePermissions";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
 import { buildClaims, buildFoodPlan, roundQuantity, toShoppingList } from "@/lib/shoppingList";
 import { todayISO } from "@/lib/loans";
@@ -55,7 +56,7 @@ import { SafetyPlanSection } from "@/components/safety/SafetyPlanSection";
 export function EventDetailPage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
-  const { hasRole } = useAuth();
+  const { addRow } = useOffline();
 
   const { rows: events, loading: eventsLoading } = useRealtimeTable("events");
   const { rows: sites } = useRealtimeTable("camping_sites", { orderBy: "name" });
@@ -78,8 +79,7 @@ export function EventDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const canEdit = hasRole(["Admin", "Manager", "Member"]);
-  const canDelete = hasRole(["Admin", "Manager"]);
+  const { canAdd, canEdit, canDelete, blockedByOffline } = useWritePermissions();
 
   const event = events.find((e) => e.id === eventId) ?? null;
   const site = event?.site_id ? (sites.find((s) => s.id === event.site_id) ?? null) : null;
@@ -186,12 +186,12 @@ export function EventDetailPage() {
 
   async function addEquipment() {
     if (!addEquipmentId) return;
-    const { error } = await supabase.from("event_equipment").insert({
+    const { error } = await addRow("event_equipment", {
       event_id: event!.id,
       equipment_id: addEquipmentId,
       quantity: Math.max(1, Number(addEquipmentQty) || 1),
     });
-    if (error) toast.error(error.message);
+    if (error) toast.error(error);
     else {
       setAddEquipmentId("");
       setAddEquipmentQty("1");
@@ -214,12 +214,12 @@ export function EventDetailPage() {
 
   async function addFood() {
     if (!addFoodId) return;
-    const { error } = await supabase.from("event_food").insert({
+    const { error } = await addRow("event_food", {
       event_id: event!.id,
       food_item_id: addFoodId,
       quantity: Math.max(0, Number(addFoodQty) || 0),
     });
-    if (error) toast.error(error.message);
+    if (error) toast.error(error);
     else {
       setAddFoodId("");
       setAddFoodQty("1");
@@ -334,6 +334,14 @@ export function EventDetailPage() {
         </div>
       </div>
 
+      {blockedByOffline && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          You&apos;re offline. You can still add things to this camp — they&apos;ll sync when
+          you&apos;re back. Changing or removing what&apos;s already here waits until then, so
+          nobody else&apos;s edits get overwritten.
+        </p>
+      )}
+
       {/* ---- Equipment ---------------------------------------------------- */}
       <section className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between gap-3">
@@ -343,7 +351,7 @@ export function EventDetailPage() {
           </span>
         </div>
 
-        {canEdit && (
+        {canAdd && (
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-56 flex-1">
               <Select value={addEquipmentId} onValueChange={setAddEquipmentId}>
@@ -470,7 +478,7 @@ export function EventDetailPage() {
           </Link>
         </div>
 
-        {canEdit && (
+        {canAdd && (
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-56 flex-1">
               <Select value={addFoodId} onValueChange={setAddFoodId}>

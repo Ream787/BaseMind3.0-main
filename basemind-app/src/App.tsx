@@ -2,6 +2,7 @@ import { RouterProvider } from "react-router";
 
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/context/AuthContext";
+import { OfflineProvider } from "@/context/OfflineContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { missingEnvVars } from "@/lib/supabase/env";
 import { router } from "@/routes";
@@ -36,10 +37,12 @@ export function App() {
       {missingEnvVars.length > 0 ? (
         <MissingConfig />
       ) : (
-        <AuthProvider>
-          <RouterProvider router={router} />
-          <Toaster />
-        </AuthProvider>
+        <OfflineProvider>
+          <AuthProvider>
+            <RouterProvider router={router} />
+            <Toaster />
+          </AuthProvider>
+        </OfflineProvider>
       )}
     </ThemeProvider>
   );

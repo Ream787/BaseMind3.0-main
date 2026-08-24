@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { supabase } from "@/lib/supabase/client";
+import { idbGet, idbSet } from "@/lib/offline/db";
 import type { Database } from "@/types/database";
+
+const cacheKey = (table: string) => `table:${table}`;
 
 type TableName = keyof Database["public"]["Tables"];
 type RowOf<T extends TableName> = Database["public"]["Tables"][T]["Row"];
@@ -45,15 +48,28 @@ export function useRealtimeTable<T extends TableName>(
     let active = true;
 
     async function load() {
+      // Show the last known data straight away. At camp this is often the
+      // only data there is, and even on a good connection it beats a spinner.
+      const cached = await idbGet<RowOf<T>[]>(cacheKey(table));
+      if (active && cached?.length) {
+        setRows(sortRows(cached));
+        setLoading(false);
+      }
+
       const { data, error: fetchError } = await supabase.from(table).select("*");
       if (!active) return;
+
       if (fetchError) {
-        setError(fetchError.message);
+        // With a cache to fall back on this isn't an error the user can act
+        // on — the offline banner already explains the situation.
+        if (!cached?.length) setError(fetchError.message);
       } else {
         setError(null);
         // select("*") resolves to a deeply-inferred query type that doesn't
         // narrow to the plain Row shape, hence the cast through unknown.
-        setRows(sortRows((data ?? []) as unknown as RowOf<T>[]));
+        const fresh = (data ?? []) as unknown as RowOf<T>[];
+        setRows(sortRows(fresh));
+        void idbSet(cacheKey(table), fresh);
       }
       setLoading(false);
     }
