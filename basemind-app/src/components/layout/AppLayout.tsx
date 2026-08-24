@@ -7,10 +7,12 @@ import {
   LogOut,
   MapPin,
   Moon,
+  MoreHorizontal,
   Package,
   Settings,
   ShoppingBasket,
   Sun,
+  Users,
 } from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
@@ -30,20 +32,55 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Role } from "@/types/database";
 
-const navItems: {
+/** Desktop overflow menu for the less-used sections. */
+function MoreMenu({ items }: { items: NavItem[] }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
+        <MoreHorizontal className="size-4" />
+        More
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {items.map((item) => (
+          <DropdownMenuItem key={item.to} asChild>
+            <NavLink to={item.to} className="flex items-center gap-2">
+              <item.icon className="size-4" />
+              {item.label}
+            </NavLink>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+type NavItem = {
   to: string;
   label: string;
   icon: typeof Package;
   roles?: Role[];
   feature?: FeatureKey;
-}[] = [
+};
+
+/**
+ * Split so the bar never overflows.
+ *
+ * Everything in one row meant eight items scrolling off a phone and, on a
+ * narrower desktop window, the last item (Admin) being clipped out of sight
+ * entirely. Four primary items plus a More menu fits a 375px screen exactly.
+ */
+const primaryNav: NavItem[] = [
   { to: "/equipment", label: "Equipment", icon: Package, feature: "equipment" },
+  { to: "/events", label: "Camps", icon: CalendarDays, feature: "events" },
   { to: "/loans", label: "Borrowed", icon: HandCoins, feature: "loans" },
-  { to: "/events", label: "Calendar", icon: CalendarDays, feature: "events" },
-  { to: "/sites", label: "Sites", icon: MapPin, feature: "sites" },
-  { to: "/menus", label: "Menus", icon: ChefHat, feature: "menus" },
   { to: "/food", label: "Food", icon: ShoppingBasket, feature: "food" },
+];
+
+const secondaryNav: NavItem[] = [
+  { to: "/menus", label: "Menus", icon: ChefHat, feature: "menus" },
+  { to: "/sites", label: "Sites", icon: MapPin, feature: "sites" },
   { to: "/forms", label: "Forms", icon: FileText, feature: "forms" },
+  { to: "/users", label: "Users", icon: Users, roles: ["Admin"] },
   { to: "/admin", label: "Admin", icon: Settings, roles: ["Admin"] },
 ];
 
@@ -63,11 +100,12 @@ export function AppLayout() {
   if (!session) return <Navigate to="/login" replace />;
   if (!profile || profile.status !== "Active") return <Navigate to="/pending" replace />;
 
-  const visibleNavItems = navItems.filter(
-    (item) =>
-      (!item.roles || item.roles.includes(profile.role)) &&
-      (!item.feature || isEnabled(item.feature)),
-  );
+  const canSee = (item: NavItem) =>
+    (!item.roles || item.roles.includes(profile.role)) &&
+    (!item.feature || isEnabled(item.feature));
+
+  const primary = primaryNav.filter(canSee);
+  const secondary = secondaryNav.filter(canSee);
 
   const initials =
     profile.name.trim().length > 0
@@ -85,10 +123,10 @@ export function AppLayout() {
       <header className="flex items-center justify-between gap-2 border-b px-4 py-3">
         <div className="flex min-w-0 items-center gap-6">
           <span className="shrink-0 text-lg font-semibold text-primary">BaseMind</span>
-          {/* Eight items won't fit across a phone. Below md they move into the
-              bottom bar, which is easier to reach one-handed anyway. */}
+          {/* On phones this row is hidden and the bottom bar takes over —
+              easier to reach one-handed. */}
           <nav className="hidden items-center gap-1 md:flex">
-            {visibleNavItems.map((item) => (
+            {primary.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -104,6 +142,7 @@ export function AppLayout() {
                 {item.label}
               </NavLink>
             ))}
+            {secondary.length > 0 && <MoreMenu items={secondary} />}
           </nav>
         </div>
         <div className="flex shrink-0 items-center gap-1 sm:gap-3">
@@ -141,21 +180,40 @@ export function AppLayout() {
         <Outlet />
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t bg-background md:hidden">
-        {visibleNavItems.map((item) => (
+      {/* Fixed count, so nothing ever scrolls off the edge. */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden">
+        {primary.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             className={({ isActive }) =>
-              `flex min-w-16 flex-1 flex-col items-center gap-0.5 px-2 py-2 text-[11px] font-medium transition-colors ${
+              `flex flex-1 flex-col items-center gap-0.5 px-1 py-2 text-[11px] font-medium transition-colors ${
                 isActive ? "text-primary" : "text-muted-foreground"
               }`
             }
           >
             <item.icon className="size-5" />
-            {item.label}
+            <span className="max-w-full truncate">{item.label}</span>
           </NavLink>
         ))}
+        {secondary.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex flex-1 flex-col items-center gap-0.5 px-1 py-2 text-[11px] font-medium text-muted-foreground">
+              <MoreHorizontal className="size-5" />
+              More
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" side="top" className="mb-1">
+              {secondary.map((item) => (
+                <DropdownMenuItem key={item.to} asChild>
+                  <NavLink to={item.to} className="flex items-center gap-2">
+                    <item.icon className="size-4" />
+                    {item.label}
+                  </NavLink>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </nav>
     </div>
   );
