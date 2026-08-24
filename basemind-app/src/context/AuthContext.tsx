@@ -2,13 +2,18 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import type { Session } from "@supabase/supabase-js";
 
 import { supabase } from "@/lib/supabase/client";
+import { idbGet, idbSet, idbDelete } from "@/lib/offline/db";
 import type { Role, UserProfile } from "@/types/database";
+
+const profileKey = (userId: string) => `profile:${userId}`;
 
 interface AuthContextType {
   session: Session | null;
   profile: UserProfile | null;
   loading: boolean;
   error: string | null;
+  /** True when the profile came from cache because the server was unreachable. */
+  usingCachedProfile: boolean;
   login: (email: string, password: string) => Promise<string | null>;
   logout: () => Promise<void>;
   hasRole: (roles: Role[]) => boolean;
@@ -21,7 +26,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [usingCachedProfile, setUsingCachedProfile] = useState(false);
 
+  /**
+   * Loads the signed-in user's profile, falling back to the last known copy
+   * when the server can't be reached.
+   *
+   * Without this, an already-signed-in leader at a camp with no signal would
+   * be bounced to the login screen — exactly when the safety plan is needed.
+   * Supabase keeps the session itself in local storage, so only the profile
+   * row needs caching.
+   *
+   * The cached role decides what the UI offers, not what the database allows:
+   * RLS still runs server-side, so a stale role can't be used to actually do
+   * anything once the connection returns.
+   */
   async function fetchProfile(userId: string) {
     const { data, error: fetchError } = await supabase
       .from("users")
@@ -29,13 +48,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq("id", userId)
       .single();
 
-    if (fetchError) {
-      setError(fetchError.message);
-      setProfile(null);
+    if (!fetchError && data) {
+      setError(null);
+      setProfile(data);
+      setUsingCachedProfile(false);
+      void idbSet(profileKey(userId), data);
       return;
     }
-    setError(null);
-    setProfile(data);
+
+    const cached = await idbGet<UserProfile>(profileKey(userId));
+    if (cached) {
+      setError(null);
+      setProfile(cached);
+      setUsingCachedProfile(true);
+      return;
+    }
+
+    setError(fetchError?.message ?? "Couldn't load your profile.");
+    setProfile(null);
+    setUsingCachedProfile(false);
   }
 
   useEffect(() => {
@@ -69,15 +100,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     if (signInError) {
-      setError(signInError.message);
-      return signInError.message;
+      // Signing in genuinely needs the server; say so plainly rather than
+      // reporting it as a rejected password.
+      const message = /fetch|network|timeout/i.test(signInError.message)
+        ? "Can't reach the server. Check your connection and try again."
+        : signInError.message;
+      setError(message);
+      return message;
     }
     return null;
   }
 
   async function logout() {
+    const userId = session?.user.id;
     await supabase.auth.signOut();
     setProfile(null);
+    setUsingCachedProfile(false);
+    // Don't leave a signed-out user's details on a shared phone.
+    if (userId) void idbDelete(profileKey(userId));
   }
 
   function hasRole(roles: Role[]) {
@@ -85,7 +125,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, error, login, logout, hasRole }}>
+    <AuthContext.Provider
+      value={{ session, profile, loading, error, usingCachedProfile, login, logout, hasRole }}
+    >
       {children}
     </AuthContext.Provider>
   );

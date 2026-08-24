@@ -1,7 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, Link } from "react-router";
 
+import { CloudOff } from "lucide-react";
+
 import { useAuth } from "@/context/AuthContext";
+import { useOffline } from "@/context/OfflineContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,12 +19,40 @@ import {
 
 export function LoginPage() {
   const { session, loading, login } = useAuth();
+  const { online } = useOffline();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   if (!loading && session) return <Navigate to="/" replace />;
+
+  // Signing in needs the server, so offering the form offline just invites a
+  // failure the user can't do anything about. Anyone already signed in never
+  // reaches this screen — their session and profile are both cached.
+  if (!online) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-sm text-center">
+          <CardHeader>
+            <div className="mx-auto mb-2 flex size-10 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950">
+              <CloudOff className="size-5 text-amber-700 dark:text-amber-300" />
+            </div>
+            <CardTitle>You&apos;re offline</CardTitle>
+            <CardDescription>
+              Signing in needs a connection. If you&apos;ve signed in on this device before,
+              reopen the app once you have signal and it will remember you.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter className="justify-center">
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Try again
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();

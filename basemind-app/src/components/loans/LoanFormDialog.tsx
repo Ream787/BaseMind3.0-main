@@ -268,7 +268,7 @@ export function LoanFormDialog({
             </datalist>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="loan-group">Scout group</Label>
               <Input
@@ -300,7 +300,7 @@ export function LoanFormDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="loan-phone">Phone</Label>
               <Input
@@ -321,7 +321,7 @@ export function LoanFormDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="loan-borrowed">Borrowed on</Label>
               <Input

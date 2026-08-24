@@ -116,7 +116,7 @@ export function EventsPage() {
               return (
                 <div
                   key={day.toISOString()}
-                  className={`min-h-24 border-b border-r p-1.5 last:border-r-0 [&:nth-child(7n)]:border-r-0 ${
+                  className={`min-h-14 border-b border-r p-1 last:border-r-0 sm:min-h-24 sm:p-1.5 [&:nth-child(7n)]:border-r-0 ${
                     outsideMonth ? "bg-muted/30" : ""
                   }`}
                 >
@@ -149,9 +149,14 @@ export function EventsPage() {
                         key={event.id}
                         to={`/events/${event.id}`}
                         title={event.name}
+                        aria-label={event.name}
                         className="truncate rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary hover:bg-primary/20"
                       >
-                        {event.name}
+                        {/* A name won't fit in a 45px-wide cell — on phones the
+                            block itself signals "something's on"; the Upcoming
+                            list below carries the detail. */}
+                        <span className="hidden sm:inline">{event.name}</span>
+                        <span className="block h-1 sm:hidden" />
                       </Link>
                     ))}
                   </div>

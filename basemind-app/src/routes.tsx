@@ -3,6 +3,8 @@ import { createBrowserRouter, Navigate } from "react-router";
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { RequireRole } from "@/components/layout/RequireRole";
+import { RequireFeature } from "@/components/layout/RequireFeature";
+import type { FeatureKey } from "@/types/database";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { RegisterPage } from "@/components/auth/RegisterPage";
 import { PendingApprovalPage } from "@/components/auth/PendingApprovalPage";
@@ -42,6 +44,18 @@ const FormsPage = lazy(() =>
 const UserManagementPage = lazy(() =>
   import("@/components/users/UserManagementPage").then((m) => ({ default: m.UserManagementPage })),
 );
+const AdminPage = lazy(() =>
+  import("@/components/admin/AdminPage").then((m) => ({ default: m.AdminPage })),
+);
+
+/** Lazy-loaded and hidden when its feature is switched off. */
+function Gate({ feature, children }: { feature: FeatureKey; children: ReactNode }) {
+  return (
+    <RequireFeature feature={feature}>
+      <Lazy>{children}</Lazy>
+    </RequireFeature>
+  );
+}
 
 function Lazy({ children }: { children: ReactNode }) {
   return (
@@ -76,14 +90,24 @@ export const router = createBrowserRouter([
           </Lazy>
         ),
       },
-      { path: "loans", element: <Lazy><LoansPage /></Lazy> },
-      { path: "events", element: <Lazy><EventsPage /></Lazy> },
-      { path: "events/new", element: <Lazy><CampWizardPage /></Lazy> },
-      { path: "events/:eventId", element: <Lazy><EventDetailPage /></Lazy> },
-      { path: "sites", element: <Lazy><CampingSitesPage /></Lazy> },
-      { path: "menus", element: <Lazy><MenusPage /></Lazy> },
-      { path: "food", element: <Lazy><FoodPage /></Lazy> },
-      { path: "forms", element: <Lazy><FormsPage /></Lazy> },
+      { path: "loans", element: <Gate feature="loans"><LoansPage /></Gate> },
+      { path: "events", element: <Gate feature="events"><EventsPage /></Gate> },
+      { path: "events/new", element: <Gate feature="events"><CampWizardPage /></Gate> },
+      { path: "events/:eventId", element: <Gate feature="events"><EventDetailPage /></Gate> },
+      { path: "sites", element: <Gate feature="sites"><CampingSitesPage /></Gate> },
+      { path: "menus", element: <Gate feature="menus"><MenusPage /></Gate> },
+      { path: "food", element: <Gate feature="food"><FoodPage /></Gate> },
+      { path: "forms", element: <Gate feature="forms"><FormsPage /></Gate> },
+      {
+        path: "admin",
+        element: (
+          <RequireRole roles={["Admin"]}>
+            <Lazy>
+              <AdminPage />
+            </Lazy>
+          </RequireRole>
+        ),
+      },
       {
         path: "users",
         element: (

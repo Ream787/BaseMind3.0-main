@@ -107,6 +107,25 @@ export type SafetyScenario = {
 
 export type NewSafetyScenario = Omit<SafetyScenario, "id" | "created_at">;
 
+export type FeatureKey =
+  | "equipment"
+  | "loans"
+  | "events"
+  | "sites"
+  | "menus"
+  | "food"
+  | "forms"
+  | "safety";
+
+export type FeatureFlag = {
+  key: FeatureKey;
+  label: string;
+  description: string | null;
+  enabled: boolean;
+  sort_order: number;
+  updated_at: string;
+};
+
 export type CampForm = {
   id: string;
   name: string;
@@ -236,6 +255,7 @@ export type Database = {
       safety_plans: TableDef<SafetyPlan, NewSafetyPlan>;
       safety_scenarios: TableDef<SafetyScenario, NewSafetyScenario>;
       camp_forms: TableDef<CampForm, NewCampForm>;
+      feature_flags: TableDef<FeatureFlag, FeatureFlag, Partial<FeatureFlag>>;
     };
     Views: { [_ in never]: never };
     Functions: {

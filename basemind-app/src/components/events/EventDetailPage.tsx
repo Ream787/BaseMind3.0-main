@@ -15,6 +15,7 @@ import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
 import { useOffline } from "@/context/OfflineContext";
+import { useFeatures } from "@/context/FeaturesContext";
 import { useWritePermissions } from "@/lib/useWritePermissions";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
 import { buildClaims, buildFoodPlan, roundQuantity, toShoppingList } from "@/lib/shoppingList";
@@ -57,6 +58,7 @@ export function EventDetailPage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
   const { addRow } = useOffline();
+  const { isEnabled } = useFeatures();
 
   const { rows: events, loading: eventsLoading } = useRealtimeTable("events");
   const { rows: sites } = useRealtimeTable("camping_sites", { orderBy: "name" });
@@ -634,13 +636,15 @@ export function EventDetailPage() {
         </section>
       )}
 
-      <SafetyPlanSection
-        event={event}
-        site={site}
-        plan={safetyPlan}
-        scenarios={planScenarios}
-        canEdit={canEdit}
-      />
+      {isEnabled("safety") && (
+        <SafetyPlanSection
+          event={event}
+          site={site}
+          plan={safetyPlan}
+          scenarios={planScenarios}
+          canEdit={canEdit}
+        />
+      )}
 
       <EventFormDialog
         open={editOpen}

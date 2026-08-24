@@ -141,8 +141,8 @@ export function EquipmentFormDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 flex flex-col gap-2">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-2 sm:col-span-2">
               <Label htmlFor="eq-name">Name</Label>
               <Input
                 id="eq-name"
@@ -176,7 +176,7 @@ export function EquipmentFormDialog({
                 onChange={(e) => set("quantity", e.target.value)}
               />
             </div>
-            <div className="col-span-2 flex flex-col gap-2">
+            <div className="flex flex-col gap-2 sm:col-span-2">
               <Label htmlFor="eq-location">Location</Label>
               <Input
                 id="eq-location"
@@ -243,7 +243,7 @@ export function EquipmentFormDialog({
                 onChange={(e) => set("next_check_date", e.target.value)}
               />
             </div>
-            <div className="col-span-2 flex flex-col gap-2">
+            <div className="flex flex-col gap-2 sm:col-span-2">
               <Label htmlFor="eq-notes">Notes</Label>
               <Textarea
                 id="eq-notes"
