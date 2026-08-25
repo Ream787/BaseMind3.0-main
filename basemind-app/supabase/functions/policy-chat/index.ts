@@ -101,7 +101,10 @@ Deno.serve(async (req: Request) => {
           generationConfig: {
             // Low temperature: this should read the documents, not write prose.
             temperature: 0.1,
-            maxOutputTokens: 2048,
+            // Generous, because the reply carries the answer plus verbatim
+            // quotes. Running out mid-object produces truncated JSON that
+            // can't be parsed, which surfaces as an unhelpful 502.
+            maxOutputTokens: 8192,
             responseMimeType: "application/json",
           },
         }),
@@ -116,9 +119,33 @@ Deno.serve(async (req: Request) => {
     }
 
     const data = await response.json();
+    const candidate = data?.candidates?.[0];
+    const finish: string | undefined = candidate?.finishReason;
+
+    // Gemini can decline before producing anything — say which, rather than
+    // reporting an empty reply and leaving the cause invisible.
+    if (data?.promptFeedback?.blockReason) {
+      return json(
+        {
+          error: "Gemini declined to answer.",
+          detail: `Blocked: ${data.promptFeedback.blockReason}`,
+        },
+        502,
+      );
+    }
+
     const text: string =
-      data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ??
-      "";
+      candidate?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "";
+
+    if (!text.trim()) {
+      return json(
+        {
+          error: "Gemini returned nothing.",
+          detail: finish ? `Finish reason: ${finish}` : JSON.stringify(data).slice(0, 500),
+        },
+        502,
+      );
+    }
 
     let parsed: { answer?: string; citations?: { policy_id?: string; quote?: string }[] };
     try {
@@ -126,7 +153,16 @@ Deno.serve(async (req: Request) => {
     } catch {
       // Without structured output there's no way to check citations, so this
       // is a failure rather than something to show unverified.
-      return json({ error: "The assistant's reply couldn't be read.", detail: text }, 502);
+      return json(
+        {
+          error: "The assistant's reply couldn't be read.",
+          detail:
+            finish === "MAX_TOKENS"
+              ? "The reply was cut off before it finished. Try a narrower question, or remove a policy."
+              : `Finish reason: ${finish ?? "unknown"}. Reply began: ${text.slice(0, 300)}`,
+        },
+        502,
+      );
     }
 
     const byId = new Map(policies.map((p) => [p.id, p]));

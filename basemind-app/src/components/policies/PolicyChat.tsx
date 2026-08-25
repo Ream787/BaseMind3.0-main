@@ -52,7 +52,10 @@ export function PolicyChat({ policies }: { policies: Policy[] }) {
       if (error) {
         const context = (error as { context?: Response }).context;
         const body = await context?.json().catch(() => null);
-        throw new Error(body?.error ?? error.message);
+        // The function puts the underlying cause in `detail`. Dropping it left
+        // a bare "502" with nothing to act on.
+        const parts = [body?.error, body?.reason, body?.detail].filter(Boolean);
+        throw new Error(parts.length > 0 ? parts.join(" — ") : error.message);
       }
 
       // The function already checks citations; checking again here means a
