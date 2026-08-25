@@ -14,10 +14,15 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useFeatures } from "@/context/FeaturesContext";
-import type { FeatureKey } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { OfflineBanner } from "@/components/layout/OfflineBanner";
+import {
+  CAMP_TABS,
+  EQUIPMENT_TABS,
+  FOOD_TABS,
+  type SectionTab,
+} from "@/components/layout/SectionTabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,50 +31,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Role } from "@/types/database";
-
-
-type NavItem = {
-  to: string;
-  label: string;
-  icon: typeof Package;
-  roles?: Role[];
-  feature?: FeatureKey;
-};
-
 /**
- * Three sections, not eight destinations.
+ * Three sections, not eight destinations. Related pages are tabs within a
+ * section rather than each taking a slot in the bar — eight items never
+ * fitted a phone, and on a narrow desktop the last one was clipped.
  *
- * Related pages (borrowing, sites, forms, menus) are reached by tabs within
- * their section instead of each taking a slot in the bar — eight items never
- * fitted a phone, and on a narrow desktop the last one was clipped out of
- * sight. Each entry's `match` lists the paths that light it up.
+ * A section's tabs are its source of truth, so it survives as long as any one
+ * of them is switched on. Gating a section on a single feature meant turning
+ * off Food also hid Menus, which sits in the same section but has its own
+ * switch.
  *
  * Admin isn't here on purpose: settings belong in the header, permanently
  * visible, not buried behind an overflow menu.
  */
-const primaryNav: (NavItem & { match: string[] })[] = [
-  {
-    to: "/equipment",
-    label: "Equipment",
-    icon: Package,
-    feature: "equipment",
-    match: ["/equipment", "/loans"],
-  },
-  {
-    to: "/events",
-    label: "Camps",
-    icon: CalendarDays,
-    feature: "events",
-    match: ["/events", "/sites", "/forms"],
-  },
-  {
-    to: "/food",
-    label: "Food",
-    icon: ShoppingBasket,
-    feature: "food",
-    match: ["/food", "/menus"],
-  },
+const primaryNav: { label: string; icon: typeof Package; tabs: SectionTab[] }[] = [
+  { label: "Equipment", icon: Package, tabs: EQUIPMENT_TABS },
+  { label: "Camps", icon: CalendarDays, tabs: CAMP_TABS },
+  { label: "Food", icon: ShoppingBasket, tabs: FOOD_TABS },
 ];
 
 export function AppLayout() {
@@ -89,16 +67,23 @@ export function AppLayout() {
   if (!session) return <Navigate to="/login" replace />;
   if (!profile || profile.status !== "Active") return <Navigate to="/pending" replace />;
 
-  const canSee = (item: NavItem) =>
-    (!item.roles || item.roles.includes(profile.role)) &&
-    (!item.feature || isEnabled(item.feature));
-
-  const primary = primaryNav.filter(canSee);
   const isAdmin = profile.role === "Admin";
 
-  /** A section stays lit while you're on any of its tabs. */
-  const isSectionActive = (match: string[]) =>
-    match.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
+  // A section appears if any of its tabs is switched on, and points at the
+  // first one that is — so turning off Food still leaves Menus reachable.
+  const primary = primaryNav
+    .map((section) => {
+      const tabs = section.tabs.filter((tab) => !tab.feature || isEnabled(tab.feature));
+      return { ...section, tabs, to: tabs[0]?.to };
+    })
+    .filter((section): section is typeof section & { to: string } => !!section.to);
+
+  /** A section stays lit while you're on any of its available tabs. */
+  const isSectionActive = (section: { tabs: SectionTab[] }) =>
+    section.tabs.some(
+      (tab) =>
+        location.pathname === tab.to || location.pathname.startsWith(`${tab.to}/`),
+    );
 
   const initials =
     profile.name.trim().length > 0
@@ -124,7 +109,7 @@ export function AppLayout() {
                 key={item.to}
                 to={item.to}
                 className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                  isSectionActive(item.match)
+                  isSectionActive(item)
                     ? "bg-accent text-accent-foreground"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 }`}
@@ -213,7 +198,7 @@ export function AppLayout() {
             key={item.to}
             to={item.to}
             className={`flex flex-1 flex-col items-center gap-0.5 px-1 py-2 text-xs font-medium transition-colors ${
-              isSectionActive(item.match) ? "text-primary" : "text-muted-foreground"
+              isSectionActive(item) ? "text-primary" : "text-muted-foreground"
             }`}
           >
             <item.icon className="size-5" />

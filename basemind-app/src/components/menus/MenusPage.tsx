@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { ArrowLeft, ChefHat, Pencil, Plus, Search, Trash2, Users } from "lucide-react";
+import { ArrowLeft, ChefHat, Download, Pencil, Plus, Search, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
@@ -38,6 +38,7 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { MenuEditor } from "@/components/menus/MenuEditor";
+import { downloadMenuPdf } from "@/lib/menuPdf";
 import { SectionTabs, FOOD_TABS } from "@/components/layout/SectionTabs";
 
 const ANY = "__any";
@@ -66,6 +67,7 @@ export function MenusPage() {
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Menu | null>(null);
+  const [printing, setPrinting] = useState(false);
 
   const canEdit = hasRole(["Admin", "Manager", "Member"]);
 
@@ -175,6 +177,31 @@ export function MenusPage() {
             Quantities are for {openMenu.serves} people. They scale automatically when you apply
             this menu to a camp with a different headcount.
           </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            disabled={printing}
+            onClick={async () => {
+              setPrinting(true);
+              try {
+                await downloadMenuPdf({
+                  menu: openMenu,
+                  meals: menuMeals,
+                  items: menuItems,
+                  food,
+                });
+                toast.success("Menu downloaded");
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Couldn't make the PDF");
+              } finally {
+                setPrinting(false);
+              }
+            }}
+          >
+            <Download className="size-4" />
+            {printing ? "Preparing…" : "Print menu"}
+          </Button>
         </div>
 
         <MenuEditor

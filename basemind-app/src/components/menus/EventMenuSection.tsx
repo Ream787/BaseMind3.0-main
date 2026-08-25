@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { BookmarkPlus, ChefHat, Copy, Trash2 } from "lucide-react";
+import { BookmarkPlus, ChefHat, Copy, Download, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
@@ -34,6 +34,7 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { MenuEditor } from "@/components/menus/MenuEditor";
+import { downloadMenuPdf } from "@/lib/menuPdf";
 
 interface EventMenuSectionProps {
   event: CampEvent;
@@ -61,6 +62,7 @@ export function EventMenuSection({
   const [presetName, setPresetName] = useState("");
   const [presetCategory, setPresetCategory] = useState("");
   const [clearOpen, setClearOpen] = useState(false);
+  const [printing, setPrinting] = useState(false);
 
   const selectedPreset = presets.find((p) => p.id === presetId) ?? null;
 
@@ -145,6 +147,33 @@ export function EventMenuSection({
                 onBlur={(e) => updateHeadcount(e.target.value)}
               />
             </div>
+          )}
+          {menu && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={printing}
+              onClick={async () => {
+                setPrinting(true);
+                try {
+                  await downloadMenuPdf({
+                    menu,
+                    meals,
+                    items,
+                    food,
+                    eventName: event.name,
+                  });
+                  toast.success("Menu downloaded");
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Couldn't make the PDF");
+                } finally {
+                  setPrinting(false);
+                }
+              }}
+            >
+              <Download className="size-4" />
+              {printing ? "Preparing…" : "Print menu"}
+            </Button>
           )}
           {canEdit && (
             <Button variant="outline" size="sm" onClick={() => setApplyOpen(true)}>

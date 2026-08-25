@@ -170,60 +170,116 @@ export function FoodPage() {
           Nothing in the food store yet.
         </div>
       ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>In stock</TableHead>
-                <TableHead>Notes</TableHead>
-                {(canEdit || canDelete) && <TableHead className="text-right">Actions</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{item.category || "—"}</TableCell>
-                  <TableCell>
-                    {item.quantity} {item.unit}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{item.notes || "—"}</TableCell>
-                  {(canEdit || canDelete) && (
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        {canEdit && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Edit ${item.name}`}
-                            onClick={() => {
-                              setEditing(item);
-                              setDialogOpen(true);
-                            }}
-                          >
-                            <Pencil className="size-4" />
-                          </Button>
-                        )}
-                        {canDelete && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Delete ${item.name}`}
-                            onClick={() => setDeleteTarget(item)}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  )}
+        <>
+          {/* Phones get one card per item. A five-column table there means
+              side-scrolling to read a quantity, which is the one thing you
+              actually came to check. */}
+          <ul className="flex flex-col gap-2 sm:hidden">
+            {filtered.map((item) => (
+              <li key={item.id} className="rounded-lg border bg-card p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-col">
+                    <span className="font-medium">{item.name}</span>
+                    {item.category && (
+                      <span className="text-xs text-muted-foreground">{item.category}</span>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-right font-medium">
+                    {item.quantity}
+                    <span className="ml-1 text-sm font-normal text-muted-foreground">
+                      {item.unit}
+                    </span>
+                  </span>
+                </div>
+                {item.notes && (
+                  <p className="mt-2 text-sm text-muted-foreground">{item.notes}</p>
+                )}
+                {(canEdit || canDelete) && (
+                  <div className="mt-2 flex justify-end gap-1 border-t pt-2">
+                    {canEdit && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setEditing(item);
+                          setDialogOpen(true);
+                        }}
+                      >
+                        <Pencil className="size-4" />
+                        Edit
+                      </Button>
+                    )}
+                    {canDelete && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Delete ${item.name}`}
+                        onClick={() => setDeleteTarget(item)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden rounded-lg border sm:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>In stock</TableHead>
+                  <TableHead>Notes</TableHead>
+                  {(canEdit || canDelete) && <TableHead className="text-right">Actions</TableHead>}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{item.category || "—"}</TableCell>
+                    <TableCell>
+                      {item.quantity} {item.unit}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{item.notes || "—"}</TableCell>
+                    {(canEdit || canDelete) && (
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          {canEdit && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Edit ${item.name}`}
+                              onClick={() => {
+                                setEditing(item);
+                                setDialogOpen(true);
+                              }}
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Delete ${item.name}`}
+                              onClick={() => setDeleteTarget(item)}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
