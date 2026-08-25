@@ -11,7 +11,36 @@
 // Deploy: Supabase dashboard -> Edge Functions -> new function "policy-chat",
 // paste this file, then set the GEMINI_API_KEY secret.
 
-const MODEL = "gemini-2.0-flash";
+// Overridable with a GEMINI_MODEL secret, so the model can be changed without
+// editing code. Model availability varies by key and changes over time, and a
+// name hardcoded here is the kind of thing that silently stops working.
+const MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.0-flash";
+
+/**
+ * Asks Google which models this key can actually use.
+ *
+ * A 404 on generateContent means the configured name isn't available, and the
+ * error alone doesn't say what is — which leaves you guessing. Listing them
+ * turns a dead end into something actionable.
+ */
+async function listUsableModels(apiKey: string): Promise<string> {
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+    );
+    if (!res.ok) return "";
+    const body = await res.json();
+    const names = (body?.models ?? [])
+      .filter((m: { supportedGenerationMethods?: string[] }) =>
+        m.supportedGenerationMethods?.includes("generateContent"),
+      )
+      .map((m: { name: string }) => m.name.replace(/^models\//, ""))
+      .slice(0, 12);
+    return names.length > 0 ? ` Models available on this key: ${names.join(", ")}.` : "";
+  } catch {
+    return "";
+  }
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -112,8 +141,15 @@ Deno.serve(async (req: Request) => {
     );
 
     if (!response.ok) {
+      const detail = await response.text();
+      // A 404 means the configured model name isn't usable on this key, so
+      // say which ones are rather than leaving it to trial and error.
+      const suggestion = response.status === 404 ? await listUsableModels(apiKey) : "";
       return json(
-        { error: `Gemini request failed (${response.status})`, detail: await response.text() },
+        {
+          error: `Gemini request failed (${response.status})`,
+          detail: `Using model "${MODEL}". ${detail}${suggestion}`,
+        },
         502,
       );
     }

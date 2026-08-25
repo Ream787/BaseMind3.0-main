@@ -13,7 +13,29 @@
 // Deploy: Supabase dashboard -> Edge Functions -> new function "safety-plan",
 // paste this file, then set the GEMINI_API_KEY secret.
 
-const MODEL = "gemini-2.0-flash";
+// Overridable with a GEMINI_MODEL secret, so the model can be changed without
+// editing code. Availability varies by key and changes over time.
+const MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.0-flash";
+
+/** Which models this key can actually use, for when the configured one 404s. */
+async function listUsableModels(apiKey: string): Promise<string> {
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+    );
+    if (!res.ok) return "";
+    const body = await res.json();
+    const names = (body?.models ?? [])
+      .filter((m: { supportedGenerationMethods?: string[] }) =>
+        m.supportedGenerationMethods?.includes("generateContent"),
+      )
+      .map((m: { name: string }) => m.name.replace(/^models\//, ""))
+      .slice(0, 12);
+    return names.length > 0 ? ` Models available on this key: ${names.join(", ")}.` : "";
+  } catch {
+    return "";
+  }
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -103,7 +125,14 @@ Deno.serve(async (req: Request) => {
 
     if (!response.ok) {
       const detail = await response.text();
-      return json({ error: `Gemini request failed (${response.status})`, detail }, 502);
+      const suggestion = response.status === 404 ? await listUsableModels(apiKey) : "";
+      return json(
+        {
+          error: `Gemini request failed (${response.status})`,
+          detail: `Using model "${MODEL}". ${detail}${suggestion}`,
+        },
+        502,
+      );
     }
 
     const data = await response.json();
