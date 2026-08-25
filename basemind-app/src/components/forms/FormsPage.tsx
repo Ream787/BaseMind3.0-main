@@ -15,6 +15,7 @@ import {
 import type { CampForm } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { SectionTabs, CAMP_TABS } from "@/components/layout/SectionTabs";
 import {
   Select,
   SelectContent,
@@ -307,6 +308,7 @@ export function FormsPage() {
   // ---- Library ---------------------------------------------------------
   return (
     <div className="flex flex-col gap-4">
+      <SectionTabs tabs={CAMP_TABS} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1>Forms</h1>

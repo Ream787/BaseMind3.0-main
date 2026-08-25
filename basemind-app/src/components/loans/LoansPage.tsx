@@ -30,6 +30,7 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { LoanFormDialog } from "@/components/loans/LoanFormDialog";
+import { SectionTabs, EQUIPMENT_TABS } from "@/components/layout/SectionTabs";
 
 type Filter = "out" | "overdue" | "returned" | "all";
 
@@ -131,6 +132,7 @@ export function LoansPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <SectionTabs tabs={EQUIPMENT_TABS} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1>Borrowed equipment</h1>

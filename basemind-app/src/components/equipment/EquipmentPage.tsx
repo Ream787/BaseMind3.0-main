@@ -29,6 +29,7 @@ import { EquipmentTable } from "@/components/equipment/EquipmentTable";
 import { EquipmentFormDialog } from "@/components/equipment/EquipmentFormDialog";
 import { EquipmentGroupGrid } from "@/components/equipment/EquipmentGroupGrid";
 import { LoanFormDialog } from "@/components/loans/LoanFormDialog";
+import { SectionTabs, EQUIPMENT_TABS } from "@/components/layout/SectionTabs";
 import { groupKeyFor, type GroupBy } from "@/lib/groupEquipment";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
 
@@ -147,6 +148,7 @@ export function EquipmentPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <SectionTabs tabs={EQUIPMENT_TABS} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           {openGroup ? (

@@ -1,13 +1,8 @@
-import { Navigate, Outlet, NavLink } from "react-router";
+import { Navigate, Outlet, NavLink, useLocation } from "react-router";
 import {
   CalendarDays,
-  ChefHat,
-  FileText,
-  HandCoins,
   LogOut,
-  MapPin,
   Moon,
-  MoreHorizontal,
   Package,
   Settings,
   ShoppingBasket,
@@ -32,27 +27,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Role } from "@/types/database";
 
-/** Desktop overflow menu for the less-used sections. */
-function MoreMenu({ items }: { items: NavItem[] }) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
-        <MoreHorizontal className="size-4" />
-        More
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        {items.map((item) => (
-          <DropdownMenuItem key={item.to} asChild>
-            <NavLink to={item.to} className="flex items-center gap-2">
-              <item.icon className="size-4" />
-              {item.label}
-            </NavLink>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
 
 type NavItem = {
   to: string;
@@ -63,31 +37,45 @@ type NavItem = {
 };
 
 /**
- * Split so the bar never overflows.
+ * Three sections, not eight destinations.
  *
- * Everything in one row meant eight items scrolling off a phone and, on a
- * narrower desktop window, the last item (Admin) being clipped out of sight
- * entirely. Four primary items plus a More menu fits a 375px screen exactly.
+ * Related pages (borrowing, sites, forms, menus) are reached by tabs within
+ * their section instead of each taking a slot in the bar — eight items never
+ * fitted a phone, and on a narrow desktop the last one was clipped out of
+ * sight. Each entry's `match` lists the paths that light it up.
+ *
+ * Admin isn't here on purpose: settings belong in the header, permanently
+ * visible, not buried behind an overflow menu.
  */
-const primaryNav: NavItem[] = [
-  { to: "/equipment", label: "Equipment", icon: Package, feature: "equipment" },
-  { to: "/events", label: "Camps", icon: CalendarDays, feature: "events" },
-  { to: "/loans", label: "Borrowed", icon: HandCoins, feature: "loans" },
-  { to: "/food", label: "Food", icon: ShoppingBasket, feature: "food" },
-];
-
-const secondaryNav: NavItem[] = [
-  { to: "/menus", label: "Menus", icon: ChefHat, feature: "menus" },
-  { to: "/sites", label: "Sites", icon: MapPin, feature: "sites" },
-  { to: "/forms", label: "Forms", icon: FileText, feature: "forms" },
-  { to: "/users", label: "Users", icon: Users, roles: ["Admin"] },
-  { to: "/admin", label: "Admin", icon: Settings, roles: ["Admin"] },
+const primaryNav: (NavItem & { match: string[] })[] = [
+  {
+    to: "/equipment",
+    label: "Equipment",
+    icon: Package,
+    feature: "equipment",
+    match: ["/equipment", "/loans"],
+  },
+  {
+    to: "/events",
+    label: "Camps",
+    icon: CalendarDays,
+    feature: "events",
+    match: ["/events", "/sites", "/forms"],
+  },
+  {
+    to: "/food",
+    label: "Food",
+    icon: ShoppingBasket,
+    feature: "food",
+    match: ["/food", "/menus"],
+  },
 ];
 
 export function AppLayout() {
   const { session, profile, loading, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { isEnabled } = useFeatures();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -105,7 +93,11 @@ export function AppLayout() {
     (!item.feature || isEnabled(item.feature));
 
   const primary = primaryNav.filter(canSee);
-  const secondary = secondaryNav.filter(canSee);
+  const isAdmin = profile.role === "Admin";
+
+  /** A section stays lit while you're on any of its tabs. */
+  const isSectionActive = (match: string[]) =>
+    match.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
 
   const initials =
     profile.name.trim().length > 0
@@ -130,22 +122,31 @@ export function AppLayout() {
               <NavLink
                 key={item.to}
                 to={item.to}
-                className={({ isActive }) =>
-                  `flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  }`
-                }
+                className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  isSectionActive(item.match)
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                }`}
               >
                 <item.icon className="size-4" />
                 {item.label}
               </NavLink>
             ))}
-            {secondary.length > 0 && <MoreMenu items={secondary} />}
           </nav>
         </div>
         <div className="flex shrink-0 items-center gap-1 sm:gap-3">
+          {/* Settings live in the header, not in the nav: always in the same
+              place on every screen size, and never pushed off the end. */}
+          {isAdmin && (
+            <Button variant="ghost" size="icon" asChild aria-label="Admin settings">
+              <NavLink
+                to="/admin"
+                className={({ isActive }) => (isActive ? "text-primary" : undefined)}
+              >
+                <Settings className="size-4" />
+              </NavLink>
+            </Button>
+          )}
           <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
             {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </Button>
@@ -165,6 +166,23 @@ export function AppLayout() {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              {isAdmin && (
+                <>
+                  <DropdownMenuItem asChild>
+                    <NavLink to="/users" className="flex items-center gap-2">
+                      <Users className="size-4" />
+                      Manage users
+                    </NavLink>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <NavLink to="/admin" className="flex items-center gap-2">
+                      <Settings className="size-4" />
+                      Admin settings
+                    </NavLink>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <DropdownMenuItem onSelect={() => logout()}>
                 <LogOut className="size-4" />
                 Sign out
@@ -180,40 +198,20 @@ export function AppLayout() {
         <Outlet />
       </main>
 
-      {/* Fixed count, so nothing ever scrolls off the edge. */}
+      {/* Three wide targets rather than a row that scrolls off the edge. */}
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden">
         {primary.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
-            className={({ isActive }) =>
-              `flex flex-1 flex-col items-center gap-0.5 px-1 py-2 text-[11px] font-medium transition-colors ${
-                isActive ? "text-primary" : "text-muted-foreground"
-              }`
-            }
+            className={`flex flex-1 flex-col items-center gap-0.5 px-1 py-2 text-xs font-medium transition-colors ${
+              isSectionActive(item.match) ? "text-primary" : "text-muted-foreground"
+            }`}
           >
             <item.icon className="size-5" />
             <span className="max-w-full truncate">{item.label}</span>
           </NavLink>
         ))}
-        {secondary.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger className="flex flex-1 flex-col items-center gap-0.5 px-1 py-2 text-[11px] font-medium text-muted-foreground">
-              <MoreHorizontal className="size-5" />
-              More
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" side="top" className="mb-1">
-              {secondary.map((item) => (
-                <DropdownMenuItem key={item.to} asChild>
-                  <NavLink to={item.to} className="flex items-center gap-2">
-                    <item.icon className="size-4" />
-                    {item.label}
-                  </NavLink>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
       </nav>
     </div>
   );

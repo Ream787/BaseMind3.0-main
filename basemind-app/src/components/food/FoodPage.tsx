@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { SectionTabs, FOOD_TABS } from "@/components/layout/SectionTabs";
 import {
   Table,
   TableHeader,
@@ -127,6 +128,7 @@ export function FoodPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <SectionTabs tabs={FOOD_TABS} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1>Food store</h1>

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { SectionTabs, CAMP_TABS } from "@/components/layout/SectionTabs";
 import {
   Dialog,
   DialogContent,
@@ -132,6 +133,7 @@ export function CampingSitesPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <SectionTabs tabs={CAMP_TABS} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1>Camping sites</h1>

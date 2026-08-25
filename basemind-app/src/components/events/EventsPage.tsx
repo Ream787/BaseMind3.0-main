@@ -9,6 +9,7 @@ import { eventsOnDay, monthGridDays, shiftMonth, upcomingEvents } from "@/lib/ca
 import type { CampEvent } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { EventFormDialog } from "@/components/events/EventFormDialog";
+import { SectionTabs, CAMP_TABS } from "@/components/layout/SectionTabs";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -47,6 +48,7 @@ export function EventsPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <SectionTabs tabs={CAMP_TABS} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1>Calendar</h1>

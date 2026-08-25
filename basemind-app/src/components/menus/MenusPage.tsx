@@ -38,6 +38,7 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { MenuEditor } from "@/components/menus/MenuEditor";
+import { SectionTabs, FOOD_TABS } from "@/components/layout/SectionTabs";
 
 const ANY = "__any";
 
@@ -190,6 +191,7 @@ export function MenusPage() {
   // ---- Library --------------------------------------------------------
   return (
     <div className="flex flex-col gap-4">
+      <SectionTabs tabs={FOOD_TABS} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1>Menus</h1>
