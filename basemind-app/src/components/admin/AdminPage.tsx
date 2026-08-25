@@ -7,20 +7,41 @@ import { supabase } from "@/lib/supabase/client";
 import { useFeatures } from "@/context/FeaturesContext";
 import { useOffline } from "@/context/OfflineContext";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import type { FeatureKey } from "@/types/database";
+import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import type { FeatureFlag, FeatureKey } from "@/types/database";
 
 export function AdminPage() {
   const { flags, loading } = useFeatures();
   const { online } = useOffline();
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirmOff, setConfirmOff] = useState<FeatureFlag | null>(null);
 
-  async function toggle(key: FeatureKey, enabled: boolean) {
+  async function setEnabled(key: FeatureKey, enabled: boolean) {
     setBusy(key);
     const { error } = await supabase.from("feature_flags").update({ enabled }).eq("key", key);
     setBusy(null);
     if (error) toast.error(error.message);
-    else toast.success(enabled ? "Feature turned on" : "Feature turned off");
+    else toast.success(enabled ? "Feature turned on" : "Feature turned off for everyone");
+  }
+
+  /**
+   * Turning something off takes it away from everyone, so it asks first.
+   * Turning it back on restores things and needs no confirmation — making
+   * both directions equally hard would just train people to click through.
+   */
+  function requestToggle(flag: FeatureFlag, next: boolean) {
+    if (next) void setEnabled(flag.key, true);
+    else setConfirmOff(flag);
   }
 
   const disabledCount = flags.filter((f) => !f.enabled).length;
@@ -62,26 +83,35 @@ export function AdminPage() {
         ) : (
           <div className="rounded-lg border">
             {flags.map((flag) => (
-              <label
+              <div
                 key={flag.key}
-                className="flex cursor-pointer items-start gap-3 border-b p-4 last:border-b-0 hover:bg-accent/40"
+                className="flex items-center gap-4 border-b p-4 last:border-b-0"
               >
-                <Checkbox
-                  className="mt-0.5"
-                  checked={flag.enabled}
-                  disabled={!online || busy === flag.key}
-                  onCheckedChange={(v) => toggle(flag.key, v === true)}
-                />
-                <span className="flex min-w-0 flex-col">
-                  <span className="font-medium">{flag.label}</span>
+                <div className="flex min-w-0 flex-col">
+                  <label htmlFor={`flag-${flag.key}`} className="font-medium">
+                    {flag.label}
+                  </label>
                   {flag.description && (
                     <span className="text-sm text-muted-foreground">{flag.description}</span>
                   )}
-                </span>
-                <span className="ml-auto shrink-0 self-center text-xs text-muted-foreground">
-                  {flag.enabled ? "On" : "Off"}
-                </span>
-              </label>
+                </div>
+                <div className="ml-auto flex shrink-0 items-center gap-2">
+                  <span
+                    className={`text-xs ${
+                      flag.enabled ? "text-muted-foreground" : "font-medium text-foreground"
+                    }`}
+                  >
+                    {flag.enabled ? "On" : "Off"}
+                  </span>
+                  <Switch
+                    id={`flag-${flag.key}`}
+                    checked={flag.enabled}
+                    disabled={!online || busy === flag.key}
+                    onCheckedChange={(next) => requestToggle(flag, next)}
+                    aria-label={`${flag.label} — currently ${flag.enabled ? "on" : "off"}`}
+                  />
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -105,6 +135,34 @@ export function AdminPage() {
           </Link>
         </Button>
       </section>
+
+      <AlertDialog open={!!confirmOff} onOpenChange={(open) => !open && setConfirmOff(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Turn off {confirmOff?.label} for everyone?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This hides {confirmOff?.label} for <strong>every user in the group</strong>, not just
+              you — its page and menu item disappear for all of them, and anyone with it open will
+              lose it as soon as their app updates.
+              <br />
+              <br />
+              Nothing is deleted. All the data stays exactly as it is and comes back untouched
+              when you switch it on again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (confirmOff) void setEnabled(confirmOff.key, false);
+                setConfirmOff(null);
+              }}
+            >
+              Turn it off
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
