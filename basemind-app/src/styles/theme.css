@@ -39,6 +39,17 @@
   --sidebar-accent-foreground: #5b21b6;
   --sidebar-border: #e5e1ee;
   --sidebar-ring: #7c3aed;
+
+  /* Person icons. Eight hues that sit beside the violet without fighting it;
+     each is used both as the emblem ink and, tinted, as the disc behind it. */
+  --avatar-1: #7c3aed;
+  --avatar-2: #0891b2;
+  --avatar-3: #b45309;
+  --avatar-4: #059669;
+  --avatar-5: #e11d48;
+  --avatar-6: #0369a1;
+  --avatar-7: #4d7c0f;
+  --avatar-8: #a21caf;
 }
 
 .dark {
@@ -78,6 +89,16 @@
   --sidebar-accent-foreground: #c4b5fd;
   --sidebar-border: #2d2140;
   --sidebar-ring: #a78bfa;
+
+  /* Lightened so the emblem still reads against a dark disc. */
+  --avatar-1: #a78bfa;
+  --avatar-2: #22d3ee;
+  --avatar-3: #fbbf24;
+  --avatar-4: #34d399;
+  --avatar-5: #fb7185;
+  --avatar-6: #38bdf8;
+  --avatar-7: #a3e635;
+  --avatar-8: #e879f9;
 }
 
 @theme inline {

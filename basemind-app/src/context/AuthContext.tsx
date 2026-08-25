@@ -17,6 +17,12 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<string | null>;
   logout: () => Promise<void>;
   hasRole: (roles: Role[]) => boolean;
+  /**
+   * Fold an already-saved change into the profile held here, so the rest of
+   * the app sees it without a round trip. Saving is the caller's job; this
+   * only keeps the copy in memory (and the offline cache) in step.
+   */
+  patchProfile: (patch: Partial<UserProfile>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -120,13 +126,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (userId) void idbDelete(profileKey(userId));
   }
 
+  function patchProfile(patch: Partial<UserProfile>) {
+    setProfile((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...patch };
+      void idbSet(profileKey(next.id), next);
+      return next;
+    });
+  }
+
   function hasRole(roles: Role[]) {
     return !!profile && profile.status === "Active" && roles.includes(profile.role);
   }
 
   return (
     <AuthContext.Provider
-      value={{ session, profile, loading, error, usingCachedProfile, login, logout, hasRole }}
+      value={{
+        session,
+        profile,
+        loading,
+        error,
+        usingCachedProfile,
+        login,
+        logout,
+        hasRole,
+        patchProfile,
+      }}
     >
       {children}
     </AuthContext.Provider>

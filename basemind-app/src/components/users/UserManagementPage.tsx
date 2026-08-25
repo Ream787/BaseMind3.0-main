@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import type { Role, UserProfile, UserStatus } from "@/types/database";
 import { Badge } from "@/components/ui/badge";
+import { UserAvatar } from "@/components/users/UserAvatar";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -125,7 +126,8 @@ export function UserManagementPage() {
               return (
                 <li key={user.id} className="rounded-lg border bg-card p-3">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 flex-col">
+                    <UserAvatar user={user} size="sm" className="mt-0.5" />
+                    <div className="flex min-w-0 flex-1 flex-col">
                       <span className="font-medium">
                         {user.name || "—"}
                         {isSelf && (
@@ -204,8 +206,15 @@ export function UserManagementPage() {
                   return (
                     <TableRow key={user.id}>
                       <TableCell className="font-medium">
-                        {user.name || "—"}{" "}
-                        {isSelf && <span className="text-xs text-muted-foreground">(you)</span>}
+                        <div className="flex items-center gap-2">
+                          <UserAvatar user={user} size="sm" />
+                          <span>
+                            {user.name || "—"}{" "}
+                            {isSelf && (
+                              <span className="text-xs text-muted-foreground">(you)</span>
+                            )}
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{user.email}</TableCell>
                       <TableCell>

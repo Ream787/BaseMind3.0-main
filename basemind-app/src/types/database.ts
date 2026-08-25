@@ -13,6 +13,10 @@ export type UserProfile = {
   phone: string | null;
   role: Role;
   status: UserStatus;
+  /** Chosen emblem key, or "initials"; null means "work it out from the id". */
+  avatar_emblem: string | null;
+  /** Chosen hue, 1-8; null means "work it out from the id". */
+  avatar_colour: number | null;
   created_at: string;
   updated_at: string;
 };

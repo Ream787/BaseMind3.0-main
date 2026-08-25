@@ -15,7 +15,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useFeatures } from "@/context/FeaturesContext";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/users/UserAvatar";
 import { OfflineBanner } from "@/components/layout/OfflineBanner";
 import {
   CAMP_TABS,
@@ -85,17 +85,6 @@ export function AppLayout() {
         location.pathname === tab.to || location.pathname.startsWith(`${tab.to}/`),
     );
 
-  const initials =
-    profile.name.trim().length > 0
-      ? profile.name
-          .split(" ")
-          .filter(Boolean)
-          .map((part) => part[0])
-          .slice(0, 2)
-          .join("")
-          .toUpperCase()
-      : profile.email[0]?.toUpperCase();
-
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between gap-2 border-b px-4 py-3">
@@ -139,9 +128,7 @@ export function AppLayout() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-2 rounded-md p-1 hover:bg-accent">
-                <Avatar className="size-8">
-                  <AvatarFallback>{initials}</AvatarFallback>
-                </Avatar>
+                <UserAvatar user={profile} size="sm" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

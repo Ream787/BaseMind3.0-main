@@ -10,9 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { IconPicker } from "@/components/profile/IconPicker";
 
 export function ProfilePage() {
-  const { profile, session } = useAuth();
+  const { profile, session, patchProfile } = useAuth();
   const { online } = useOffline();
   const { theme, toggleTheme } = useTheme();
 
@@ -120,6 +121,8 @@ export function ProfilePage() {
           </Button>
         </form>
       </section>
+
+      <IconPicker profile={profile} online={online} onChange={patchProfile} />
 
       <section className="flex flex-col gap-3 border-t pt-6">
         <h2 className="font-medium">Appearance</h2>

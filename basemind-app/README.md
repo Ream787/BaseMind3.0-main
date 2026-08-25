@@ -20,6 +20,9 @@ Equipment, camp and food management for a single Scout group, with role-based ac
 - **PDF export** — the whole camp plan, site contact details included, as a printable download
 - **Form filling** — upload an official fillable PDF once, map its boxes to camp data, then
   generate filled copies per camp
+- **Person icons** — everyone gets a little camp badge beside their name, worked out from
+  their account so it is there from day one; pick your own emblem and colour, or use your
+  initials instead
 
 ## Safety plans and the AI rewrite
 
@@ -51,6 +54,25 @@ If the model name isn't available on your key, the call fails with a 404 and the
 the model it tried **and lists the models your key can actually use**, so there's no guessing.
 Note that edge functions don't update from a git push: after editing one here you have to paste
 it into the dashboard again.
+
+## Person icons
+
+Everyone has a badge — a camp emblem in one of eight colours — shown in the header and
+anywhere people are listed. It is worked out from the user's id in the browser, so:
+
+- a new account has one immediately, with nothing to upload and nothing to set up
+- it is the same on every device, and it still draws with no connection
+- there is no state in which somebody has no icon
+
+Sixteen emblems and eight colours give 128 badges, which is enough that a group's worth of
+people rarely collide. The colours are the `--avatar-N` variables in the stylesheet, so they
+swap for dark mode along with everything else.
+
+**Your profile → Your icon** lets you pin an emblem and a colour instead of taking the ones
+your id chose, or switch to your initials if you'd rather have letters than a picture. Two
+optional columns store that; "Start again" clears them and hands the choice back to your id.
+
+No image is uploaded, generated or hosted anywhere — the badge is drawn by the app.
 
 ## Stack
 
@@ -97,6 +119,7 @@ Open the SQL Editor in your Supabase project and run the migrations in
 | `0005_menus.sql` | Menus, meals and ingredients, plus event headcount |
 | `0006_safety.sql` | Hospital/emergency details per site, and per-camp safety plans |
 | `0007_camp_forms.sql` | Uploaded fillable PDF forms and their field mappings |
+| `0010_user_icons.sql` | The emblem and colour each person picked for their badge |
 
 If you already set the project up, run whichever ones you haven't yet — the app's calendar,
 sites and food pages will error until `0003` has been applied.
