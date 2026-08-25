@@ -24,6 +24,15 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Take over as soon as a new build is fetched rather than waiting for
+        // every tab to close. Combined with the reload in lib/staleDeploy, a
+        // deploy landing mid-session self-heals instead of 404ing on chunks
+        // the old page still refers to.
+        skipWaiting: true,
+        clientsClaim: true,
+        // Old builds' chunks are useless once the new shell is live, and
+        // leaving them cached is what makes a stale tab look half-working.
+        cleanupOutdatedCaches: true,
         // The app shell is precached so it opens with no signal at all.
         globPatterns: ["**/*.{js,css,html,svg,woff2}"],
         // pdf-lib alone is ~440 kB; the default 2 MB cap would skip it.

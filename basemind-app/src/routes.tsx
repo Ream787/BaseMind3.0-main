@@ -4,6 +4,7 @@ import { createBrowserRouter, Navigate } from "react-router";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { RequireRole } from "@/components/layout/RequireRole";
 import { RequireFeature } from "@/components/layout/RequireFeature";
+import { RouteError } from "@/components/layout/RouteError";
 import type { FeatureKey } from "@/types/database";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { RegisterPage } from "@/components/auth/RegisterPage";
@@ -75,12 +76,15 @@ function Lazy({ children }: { children: ReactNode }) {
 }
 
 export const router = createBrowserRouter([
-  { path: "/login", element: <LoginPage /> },
-  { path: "/register", element: <RegisterPage /> },
-  { path: "/pending", element: <PendingApprovalPage /> },
+  { path: "/login", element: <LoginPage />, errorElement: <RouteError /> },
+  { path: "/register", element: <RegisterPage />, errorElement: <RouteError /> },
+  { path: "/pending", element: <PendingApprovalPage />, errorElement: <RouteError /> },
   {
     path: "/",
     element: <AppLayout />,
+    // Catches lazy-chunk failures from any page below, which is what a
+    // deploy landing mid-session looks like.
+    errorElement: <RouteError />,
     children: [
       { index: true, element: <Navigate to="/equipment" replace /> },
       {

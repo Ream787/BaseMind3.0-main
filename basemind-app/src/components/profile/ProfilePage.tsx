@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { KeyRound, ShieldCheck } from "lucide-react";
+import { KeyRound, Moon, ShieldCheck, Sun } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useOffline } from "@/context/OfflineContext";
+import { useTheme } from "@/context/ThemeContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 export function ProfilePage() {
   const { profile, session } = useAuth();
   const { online } = useOffline();
+  const { theme, toggleTheme } = useTheme();
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -117,6 +119,37 @@ export function ProfilePage() {
             {savingDetails ? "Saving…" : "Save details"}
           </Button>
         </form>
+      </section>
+
+      <section className="flex flex-col gap-3 border-t pt-6">
+        <h2 className="font-medium">Appearance</h2>
+        <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+          <div className="flex min-w-0 flex-col">
+            <span className="text-sm font-medium">Dark mode</span>
+            <span className="text-sm text-muted-foreground">
+              Kept on this device — it doesn&apos;t change anything for anyone else.
+            </span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={toggleTheme}
+            aria-pressed={theme === "dark"}
+          >
+            {theme === "dark" ? (
+              <>
+                <Sun className="size-4" />
+                Light
+              </>
+            ) : (
+              <>
+                <Moon className="size-4" />
+                Dark
+              </>
+            )}
+          </Button>
+        </div>
       </section>
 
       <section className="flex flex-col gap-3 border-t pt-6">
