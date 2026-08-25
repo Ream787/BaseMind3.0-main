@@ -25,7 +25,9 @@ export function SectionTabs({ tabs }: { tabs: SectionTab[] }) {
   if (visible.length < 2) return null;
 
   return (
-    <div className="-mx-4 mb-2 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+    // On a phone the strip sits tight under the header: the page's top
+    // padding above it is dead space you have to scroll past on every visit.
+    <div className="-mx-4 -mt-2 mb-2 overflow-x-auto px-4 sm:mx-0 sm:mt-0 sm:px-0">
       <nav className="flex w-max min-w-full gap-1 border-b">
         {visible.map((tab) => (
           <NavLink
