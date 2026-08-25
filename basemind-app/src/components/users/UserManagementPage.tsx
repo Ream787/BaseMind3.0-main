@@ -114,74 +114,169 @@ export function UserManagementPage() {
           Loading users…
         </div>
       ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sorted.map((user) => {
-                const isSelf = user.id === currentProfile?.id;
-                const busy = busyId === user.id;
-                return (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium">
-                      {user.name || "—"}{" "}
-                      {isSelf && <span className="text-xs text-muted-foreground">(you)</span>}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{user.email}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={statusStyles[user.status]}>
-                        {user.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {user.status === "Active" && !isSelf ? (
-                        <Select value={user.role} onValueChange={(v) => changeRole(user, v as Role)}>
-                          <SelectTrigger className="w-32" disabled={busy}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ROLES.map((r) => (
-                              <SelectItem key={r} value={r}>
-                                {r}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        user.role
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {isSelf ? (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      ) : user.status === "Pending" ? (
-                        <PendingActions user={user} busy={busy} onApprove={approve} onReject={reject} />
-                      ) : user.status === "Active" ? (
-                        <Button variant="outline" size="sm" disabled={busy} onClick={() => deactivate(user)}>
+        <>
+          {/* Phones get one card per person. A five-column table pushed the
+              role picker and the approve buttons off the right edge — the two
+              things this page exists for. */}
+          <ul className="flex flex-col gap-2 sm:hidden">
+            {sorted.map((user) => {
+              const isSelf = user.id === currentProfile?.id;
+              const busy = busyId === user.id;
+              return (
+                <li key={user.id} className="rounded-lg border bg-card p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-col">
+                      <span className="font-medium">
+                        {user.name || "—"}
+                        {isSelf && (
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">
+                            (you)
+                          </span>
+                        )}
+                      </span>
+                      <span className="truncate text-sm text-muted-foreground">{user.email}</span>
+                    </div>
+                    <Badge variant="outline" className={statusStyles[user.status]}>
+                      {user.status}
+                    </Badge>
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-2 border-t pt-3">
+                    {isSelf ? (
+                      <span className="text-sm text-muted-foreground">{user.role}</span>
+                    ) : user.status === "Pending" ? (
+                      <PendingActions
+                        user={user}
+                        busy={busy}
+                        onApprove={approve}
+                        onReject={reject}
+                      />
+                    ) : user.status === "Active" ? (
+                      <>
+                        <RoleSelect
+                          value={user.role}
+                          busy={busy}
+                          onChange={(role) => changeRole(user, role)}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => deactivate(user)}
+                        >
                           Deactivate
                         </Button>
-                      ) : (
-                        <Button variant="outline" size="sm" disabled={busy} onClick={() => reactivate(user)}>
+                      </>
+                    ) : (
+                      <>
+                        <span className="flex-1 text-sm text-muted-foreground">{user.role}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => reactivate(user)}
+                        >
                           Reactivate
                         </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+                      </>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="hidden rounded-lg border sm:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sorted.map((user) => {
+                  const isSelf = user.id === currentProfile?.id;
+                  const busy = busyId === user.id;
+                  return (
+                    <TableRow key={user.id}>
+                      <TableCell className="font-medium">
+                        {user.name || "—"}{" "}
+                        {isSelf && <span className="text-xs text-muted-foreground">(you)</span>}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={statusStyles[user.status]}>
+                          {user.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {user.status === "Active" && !isSelf ? (
+                          <RoleSelect
+                            value={user.role}
+                            busy={busy}
+                            onChange={(role) => changeRole(user, role)}
+                          />
+                        ) : (
+                          user.role
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {isSelf ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : user.status === "Pending" ? (
+                          <PendingActions user={user} busy={busy} onApprove={approve} onReject={reject} />
+                        ) : user.status === "Active" ? (
+                          <Button variant="outline" size="sm" disabled={busy} onClick={() => deactivate(user)}>
+                            Deactivate
+                          </Button>
+                        ) : (
+                          <Button variant="outline" size="sm" disabled={busy} onClick={() => reactivate(user)}>
+                            Reactivate
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
     </div>
+  );
+}
+
+/**
+ * One picker for both layouts: it fills the row on a phone card and keeps its
+ * fixed width in the table cell.
+ */
+function RoleSelect({
+  value,
+  busy,
+  onChange,
+}: {
+  value: Role;
+  busy: boolean;
+  onChange: (role: Role) => void;
+}) {
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v as Role)}>
+      <SelectTrigger className="w-32 flex-1 sm:flex-none" disabled={busy}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {ROLES.map((r) => (
+          <SelectItem key={r} value={r}>
+            {r}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -199,19 +294,8 @@ function PendingActions({
   const [role, setRole] = useState<Role>("Member");
 
   return (
-    <div className="flex items-center justify-end gap-2">
-      <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-        <SelectTrigger className="w-32" disabled={busy}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {ROLES.map((r) => (
-            <SelectItem key={r} value={r}>
-              {r}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <div className="flex w-full items-center justify-end gap-2">
+      <RoleSelect value={role} busy={busy} onChange={setRole} />
       <Button size="sm" disabled={busy} onClick={() => onApprove(user, role)}>
         Approve
       </Button>
