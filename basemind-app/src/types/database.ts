@@ -107,6 +107,22 @@ export type SafetyScenario = {
 
 export type NewSafetyScenario = Omit<SafetyScenario, "id" | "created_at">;
 
+export type Policy = {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  storage_path: string | null;
+  /** Extracted text; empty means nothing readable was found. */
+  content: string;
+  page_count: number | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NewPolicy = Omit<Policy, "id" | "created_at" | "updated_at">;
+
 export type FeatureKey =
   | "equipment"
   | "loans"
@@ -115,7 +131,8 @@ export type FeatureKey =
   | "menus"
   | "food"
   | "forms"
-  | "safety";
+  | "safety"
+  | "policies";
 
 export type FeatureFlag = {
   key: FeatureKey;
@@ -256,6 +273,7 @@ export type Database = {
       safety_scenarios: TableDef<SafetyScenario, NewSafetyScenario>;
       camp_forms: TableDef<CampForm, NewCampForm>;
       feature_flags: TableDef<FeatureFlag, FeatureFlag, Partial<FeatureFlag>>;
+      policies: TableDef<Policy, NewPolicy>;
     };
     Views: { [_ in never]: never };
     Functions: {

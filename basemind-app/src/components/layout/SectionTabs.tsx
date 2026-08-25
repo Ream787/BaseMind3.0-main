@@ -58,6 +58,7 @@ export const CAMP_TABS: SectionTab[] = [
   { to: "/events", label: "Calendar", feature: "events" },
   { to: "/sites", label: "Sites", feature: "sites" },
   { to: "/forms", label: "Forms", feature: "forms" },
+  { to: "/policies", label: "Policies", feature: "policies" },
 ];
 
 export const FOOD_TABS: SectionTab[] = [
