@@ -47,6 +47,9 @@ const UserManagementPage = lazy(() =>
 const AdminPage = lazy(() =>
   import("@/components/admin/AdminPage").then((m) => ({ default: m.AdminPage })),
 );
+const ProfilePage = lazy(() =>
+  import("@/components/profile/ProfilePage").then((m) => ({ default: m.ProfilePage })),
+);
 
 /** Lazy-loaded and hidden when its feature is switched off. */
 function Gate({ feature, children }: { feature: FeatureKey; children: ReactNode }) {
@@ -98,6 +101,7 @@ export const router = createBrowserRouter([
       { path: "menus", element: <Gate feature="menus"><MenusPage /></Gate> },
       { path: "food", element: <Gate feature="food"><FoodPage /></Gate> },
       { path: "forms", element: <Gate feature="forms"><FormsPage /></Gate> },
+      { path: "profile", element: <Lazy><ProfilePage /></Lazy> },
       {
         path: "admin",
         element: (

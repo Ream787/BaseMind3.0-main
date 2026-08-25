@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { supabase } from "@/lib/supabase/client";
 import { idbGet, idbSet } from "@/lib/offline/db";
+import { applyRealtimeChange } from "@/lib/applyRealtimeChange";
 import type { Database } from "@/types/database";
 
 const cacheKey = (table: string) => `table:${table}`;
@@ -18,9 +19,14 @@ type RowOf<T extends TableName> = Database["public"]["Tables"][T]["Row"];
  */
 export function useRealtimeTable<T extends TableName>(
   table: T,
-  options: { orderBy?: keyof RowOf<T> & string; ascending?: boolean } = {},
+  options: {
+    orderBy?: keyof RowOf<T> & string;
+    ascending?: boolean;
+    /** Column identifying a row. Not every table uses "id". */
+    primaryKey?: keyof RowOf<T> & string;
+  } = {},
 ) {
-  const { orderBy, ascending = true } = options;
+  const { orderBy, ascending = true, primaryKey = "id" } = options;
   const [rows, setRows] = useState<RowOf<T>[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,20 +85,14 @@ export function useRealtimeTable<T extends TableName>(
       .channel(`${table}-changes`)
       .on("postgres_changes", { event: "*", schema: "public", table }, (payload) => {
         setRows((prev) => {
-          if (payload.eventType === "INSERT") {
-            const row = payload.new as RowOf<T>;
-            if (prev.some((r) => idOf(r) === idOf(row))) return prev;
-            return sortRows([...prev, row]);
-          }
-          if (payload.eventType === "UPDATE") {
-            const row = payload.new as RowOf<T>;
-            return sortRows(prev.map((r) => (idOf(r) === idOf(row) ? row : r)));
-          }
-          if (payload.eventType === "DELETE") {
-            const row = payload.old as RowOf<T>;
-            return prev.filter((r) => idOf(r) !== idOf(row));
-          }
-          return prev;
+          const change =
+            payload.eventType === "DELETE"
+              ? ({ eventType: "DELETE", old: payload.old as RowOf<T> } as const)
+              : ({
+                  eventType: payload.eventType,
+                  new: payload.new as RowOf<T>,
+                } as const);
+          return sortRows(applyRealtimeChange(prev, change, primaryKey));
         });
       })
       .subscribe();
@@ -101,11 +101,7 @@ export function useRealtimeTable<T extends TableName>(
       active = false;
       supabase.removeChannel(channel);
     };
-  }, [table, sortRows]);
+  }, [table, sortRows, primaryKey]);
 
   return { rows, loading, error, setRows };
-}
-
-function idOf(row: unknown): string | undefined {
-  return (row as { id?: string })?.id;
 }

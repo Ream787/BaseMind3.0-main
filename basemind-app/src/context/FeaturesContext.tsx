@@ -12,7 +12,11 @@ interface FeaturesContextType {
 const FeaturesContext = createContext<FeaturesContextType | undefined>(undefined);
 
 export function FeaturesProvider({ children }: { children: ReactNode }) {
-  const { rows: flags, loading } = useRealtimeTable("feature_flags", { orderBy: "sort_order" });
+  // feature_flags is keyed by `key`, not `id`.
+  const { rows: flags, loading } = useRealtimeTable("feature_flags", {
+    orderBy: "sort_order",
+    primaryKey: "key",
+  });
 
   /**
    * Unknown or not-yet-loaded features default to on.

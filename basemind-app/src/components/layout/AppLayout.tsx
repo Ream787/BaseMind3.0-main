@@ -7,6 +7,7 @@ import {
   Settings,
   ShoppingBasket,
   Sun,
+  UserCog,
   Users,
 } from "lucide-react";
 
@@ -165,6 +166,13 @@ export function AppLayout() {
                   <span className="text-xs font-normal text-muted-foreground">{profile.role}</span>
                 </div>
               </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <NavLink to="/profile" className="flex items-center gap-2">
+                  <UserCog className="size-4" />
+                  Your profile
+                </NavLink>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               {isAdmin && (
                 <>
