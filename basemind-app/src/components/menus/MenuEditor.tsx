@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { NewIngredientDialog } from "@/components/menus/NewIngredientDialog";
 
 interface MenuEditorProps {
   menu: Menu;
@@ -153,14 +154,21 @@ interface MealCardProps {
 function MealCard({ meal, items, food, foodById, canEdit, scaleNote, onRemove }: MealCardProps) {
   const [addFoodId, setAddFoodId] = useState("");
   const [addQty, setAddQty] = useState("1");
+  const [newIngredientOpen, setNewIngredientOpen] = useState(false);
 
   const unused = food.filter((f) => !items.some((i) => i.food_item_id === f.id));
 
-  async function addItem() {
-    if (!addFoodId) return;
+  async function addItem(foodItemId = addFoodId) {
+    if (!foodItemId) return;
+    // Adding one that's already on this meal would hit the unique index, so
+    // treat it as a no-op rather than showing a database error.
+    if (items.some((i) => i.food_item_id === foodItemId)) {
+      toast.info("That ingredient is already on this meal.");
+      return;
+    }
     const { error } = await supabase.from("menu_meal_items").insert({
       meal_id: meal.id,
-      food_item_id: addFoodId,
+      food_item_id: foodItemId,
       quantity: Math.max(0, Number(addQty) || 0),
     });
     if (error) toast.error(error.message);
@@ -247,16 +255,15 @@ function MealCard({ meal, items, food, foodById, canEdit, scaleNote, onRemove }:
                 <SelectValue placeholder="Add an ingredient…" />
               </SelectTrigger>
               <SelectContent>
-                {unused.length === 0 ? (
+                {unused.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.name} ({f.unit})
+                  </SelectItem>
+                ))}
+                {unused.length === 0 && (
                   <div className="px-2 py-1.5 text-sm text-muted-foreground">
                     Everything in the food store is already here
                   </div>
-                ) : (
-                  unused.map((f) => (
-                    <SelectItem key={f.id} value={f.id}>
-                      {f.name} ({f.unit})
-                    </SelectItem>
-                  ))
                 )}
               </SelectContent>
             </Select>
@@ -270,12 +277,30 @@ function MealCard({ meal, items, food, foodById, canEdit, scaleNote, onRemove }:
             value={addQty}
             onChange={(e) => setAddQty(e.target.value)}
           />
-          <Button size="sm" onClick={addItem} disabled={!addFoodId}>
+          <Button size="sm" onClick={() => addItem()} disabled={!addFoodId}>
             <Plus className="size-4" />
             Add
           </Button>
+          {/* Sits outside the Select: a "create new" row inside a listbox is
+              easy to pick by accident when scrolling for a real ingredient. */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setNewIngredientOpen(true)}
+            title="Add an ingredient that isn't in the food store yet"
+          >
+            <Plus className="size-4" />
+            New
+          </Button>
         </div>
       )}
+
+      <NewIngredientDialog
+        open={newIngredientOpen}
+        onOpenChange={setNewIngredientOpen}
+        food={food}
+        onReady={(foodItemId) => addItem(foodItemId)}
+      />
     </div>
   );
 }

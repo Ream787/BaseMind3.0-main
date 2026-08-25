@@ -19,6 +19,22 @@ export const MENU_CATEGORIES = [
   "Backpacking",
 ] as const;
 
+/**
+ * Finds an existing food item by name, ignoring case and surrounding spaces.
+ *
+ * Used before creating one from the menu editor: typing "rice" when Rice is
+ * already in the store should reuse it, not add a second row that splits the
+ * stock and the shopping list between two spellings.
+ */
+export function findFoodByName<T extends { name: string }>(
+  food: T[],
+  name: string,
+): T | undefined {
+  const wanted = name.trim().toLowerCase();
+  if (!wanted) return undefined;
+  return food.find((item) => item.name.trim().toLowerCase() === wanted);
+}
+
 /** Position of a slot in the day; unknown slots sort last, then alphabetically. */
 export function mealSlotOrder(slot: string): number {
   const index = MEAL_SLOTS.findIndex((s) => s.toLowerCase() === slot.trim().toLowerCase());
