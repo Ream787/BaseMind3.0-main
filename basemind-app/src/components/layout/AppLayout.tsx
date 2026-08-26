@@ -87,7 +87,9 @@ export function AppLayout() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between gap-2 border-b px-4 py-3">
+      {/* py-1.5 on phones rather than py-3: the row is already as tall as its
+          32px controls, and the extra padding only pushed the page down. */}
+      <header className="flex items-center justify-between gap-2 border-b px-4 py-1.5 sm:py-3">
         <div className="flex min-w-0 items-center gap-6">
           <span className="shrink-0 text-lg font-semibold text-primary">BaseMind</span>
           {/* On phones this row is hidden and the bottom bar takes over —
