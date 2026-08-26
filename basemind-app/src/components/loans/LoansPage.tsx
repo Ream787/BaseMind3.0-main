@@ -6,11 +6,10 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
-import { daysOverdue, isOutstanding, loanStatus, sortByUrgency, todayISO } from "@/lib/loans";
+import { isOutstanding, loanStatus, sortByUrgency, todayISO } from "@/lib/loans";
 import type { EquipmentLoan } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableHeader,
@@ -29,6 +28,7 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
+import { LoanCard, LoanStatusBadge } from "@/components/loans/LoanCard";
 import { LoanFormDialog } from "@/components/loans/LoanFormDialog";
 import { SectionTabs, EQUIPMENT_TABS } from "@/components/layout/SectionTabs";
 
@@ -97,37 +97,6 @@ export function LoansPage() {
     if (deleteError) toast.error(deleteError.message);
     else toast.success("Loan record deleted");
     setDeleteTarget(null);
-  }
-
-  function statusBadge(loan: EquipmentLoan) {
-    const status = loanStatus(loan, today);
-    if (status === "returned") {
-      return (
-        <span className="text-muted-foreground">
-          {loan.returned_on ? format(parseISO(loan.returned_on), "d MMM") : "Returned"}
-        </span>
-      );
-    }
-    if (status === "overdue") {
-      const late = daysOverdue(loan, today);
-      return (
-        <Badge variant="outline" className="border-red-200 bg-red-100 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-          {late} {late === 1 ? "day" : "days"} overdue
-        </Badge>
-      );
-    }
-    if (status === "due-soon") {
-      return (
-        <Badge variant="outline" className="border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
-          Due {loan.due_back ? format(parseISO(loan.due_back), "d MMM") : "soon"}
-        </Badge>
-      );
-    }
-    return (
-      <span className="text-muted-foreground">
-        {loan.due_back ? `Due ${format(parseISO(loan.due_back), "d MMM")}` : "No date set"}
-      </span>
-    );
   }
 
   return (
@@ -205,114 +174,143 @@ export function LoansPage() {
               : "No loans to show."}
         </div>
       ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Item</TableHead>
-                <TableHead>Borrower</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Borrowed</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {visible.map((loan) => {
-                const item = equipmentById.get(loan.equipment_id);
-                return (
-                  <TableRow key={loan.id}>
-                    <TableCell>
-                      <span className="font-medium">{item?.name ?? "Unknown item"}</span>
-                      {loan.quantity > 1 && (
-                        <span className="text-muted-foreground"> ×{loan.quantity}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span>
-                          {loan.borrower_name}
-                          {loan.position && (
-                            <span className="text-muted-foreground"> ({loan.position})</span>
+        <>
+          {/* Phones get one card per loan. Six columns there pushed the phone
+              number and the Returned button off the right edge — the two
+              things you reach for when you're chasing kit back in. */}
+          <ul className="flex flex-col gap-2 sm:hidden">
+            {visible.map((loan) => {
+              const item = equipmentById.get(loan.equipment_id);
+              return (
+                <LoanCard
+                  key={loan.id}
+                  loan={loan}
+                  item={item}
+                  today={today}
+                  canEdit={canEdit}
+                  canDelete={canDelete}
+                  onReturn={markReturned}
+                  onEdit={(l) => {
+                    setEditing(l);
+                    setDialogOpen(true);
+                  }}
+                  onDelete={setDeleteTarget}
+                />
+              );
+            })}
+          </ul>
+
+          <div className="hidden rounded-lg border sm:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item</TableHead>
+                  <TableHead>Borrower</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Borrowed</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visible.map((loan) => {
+                  const item = equipmentById.get(loan.equipment_id);
+                  return (
+                    <TableRow key={loan.id}>
+                      <TableCell>
+                        <span className="font-medium">{item?.name ?? "Unknown item"}</span>
+                        {loan.quantity > 1 && (
+                          <span className="text-muted-foreground"> ×{loan.quantity}</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span>
+                            {loan.borrower_name}
+                            {loan.position && (
+                              <span className="text-muted-foreground"> ({loan.position})</span>
+                            )}
+                          </span>
+                          {loan.scout_group && (
+                            <span className="text-xs text-muted-foreground">{loan.scout_group}</span>
                           )}
-                        </span>
-                        {loan.scout_group && (
-                          <span className="text-xs text-muted-foreground">{loan.scout_group}</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col text-sm">
-                        {loan.phone && (
-                          <a
-                            href={`tel:${loan.phone}`}
-                            className="flex items-center gap-1.5 text-primary hover:underline"
-                          >
-                            <Phone className="size-3 shrink-0" />
-                            {loan.phone}
-                          </a>
-                        )}
-                        {loan.email && (
-                          <a
-                            href={`mailto:${loan.email}`}
-                            className="flex items-center gap-1.5 text-primary hover:underline"
-                          >
-                            <Mail className="size-3 shrink-0" />
-                            <span className="max-w-40 truncate">{loan.email}</span>
-                          </a>
-                        )}
-                        {!loan.phone && !loan.email && (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {format(parseISO(loan.borrowed_on), "d MMM yyyy")}
-                    </TableCell>
-                    <TableCell>{statusBadge(loan)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        {canEdit && isOutstanding(loan) && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => markReturned(loan)}
-                          >
-                            <Check className="size-4" />
-                            Returned
-                          </Button>
-                        )}
-                        {canEdit && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Edit loan"
-                            onClick={() => {
-                              setEditing(loan);
-                              setDialogOpen(true);
-                            }}
-                          >
-                            <Pencil className="size-4" />
-                          </Button>
-                        )}
-                        {canDelete && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Delete loan record"
-                            onClick={() => setDeleteTarget(loan)}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col text-sm">
+                          {loan.phone && (
+                            <a
+                              href={`tel:${loan.phone}`}
+                              className="flex items-center gap-1.5 text-primary hover:underline"
+                            >
+                              <Phone className="size-3 shrink-0" />
+                              {loan.phone}
+                            </a>
+                          )}
+                          {loan.email && (
+                            <a
+                              href={`mailto:${loan.email}`}
+                              className="flex items-center gap-1.5 text-primary hover:underline"
+                            >
+                              <Mail className="size-3 shrink-0" />
+                              <span className="max-w-40 truncate">{loan.email}</span>
+                            </a>
+                          )}
+                          {!loan.phone && !loan.email && (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {format(parseISO(loan.borrowed_on), "d MMM yyyy")}
+                      </TableCell>
+                      <TableCell>
+                        <LoanStatusBadge loan={loan} today={today} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          {canEdit && isOutstanding(loan) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => markReturned(loan)}
+                            >
+                              <Check className="size-4" />
+                              Returned
+                            </Button>
+                          )}
+                          {canEdit && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="Edit loan"
+                              onClick={() => {
+                                setEditing(loan);
+                                setDialogOpen(true);
+                              }}
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="Delete loan record"
+                              onClick={() => setDeleteTarget(loan)}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
 
       <LoanFormDialog
