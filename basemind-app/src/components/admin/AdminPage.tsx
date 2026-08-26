@@ -18,6 +18,7 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
+import { LabAdminSection } from "@/components/lab/LabAdminSection";
 import type { FeatureFlag, FeatureKey } from "@/types/database";
 
 export function AdminPage() {
@@ -122,6 +123,8 @@ export function AdminPage() {
           </p>
         )}
       </section>
+
+      <LabAdminSection />
 
       <section className="flex flex-col gap-3 border-t pt-6">
         <h2 className="font-medium">People</h2>

@@ -7,6 +7,22 @@ import type { Database } from "@/types/database";
 
 const cacheKey = (table: string) => `table:${table}`;
 
+/**
+ * Makes every subscription's channel name unique.
+ *
+ * `supabase.channel(topic)` returns the *existing* channel when one already
+ * has that topic, and `removeChannel` is asynchronous. So a component that
+ * unmounts and immediately remounts — React's StrictMode does exactly this
+ * in development — gets handed back a channel that has already subscribed,
+ * and the second `.on()` throws "cannot add postgres_changes callbacks
+ * after subscribe()". Two components watching the same table collide the
+ * same way in production.
+ *
+ * A counter fixes both: one topic per hook instance, so a new subscription
+ * can never land on a channel that is still being torn down.
+ */
+let channelSequence = 0;
+
 type TableName = keyof Database["public"]["Tables"];
 type RowOf<T extends TableName> = Database["public"]["Tables"][T]["Row"];
 
@@ -82,7 +98,7 @@ export function useRealtimeTable<T extends TableName>(
     load();
 
     const channel = supabase
-      .channel(`${table}-changes`)
+      .channel(`${table}-changes-${(channelSequence += 1)}`)
       .on("postgres_changes", { event: "*", schema: "public", table }, (payload) => {
         setRows((prev) => {
           const change =

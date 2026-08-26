@@ -3,6 +3,7 @@ import { RouterProvider } from "react-router";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/context/AuthContext";
 import { FeaturesProvider } from "@/context/FeaturesContext";
+import { LabProvider } from "@/context/LabContext";
 import { OfflineProvider } from "@/context/OfflineContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { missingEnvVars } from "@/lib/supabase/env";
@@ -41,8 +42,13 @@ export function App() {
         <OfflineProvider>
           <AuthProvider>
             <FeaturesProvider>
-              <RouterProvider router={router} />
-              <Toaster />
+              {/* Inside FeaturesProvider so a lab page can read both sets of
+                  switches, and inside AuthProvider because every lab query
+                  is refused until there is a signed-in, approved user. */}
+              <LabProvider>
+                <RouterProvider router={router} />
+                <Toaster />
+              </LabProvider>
             </FeaturesProvider>
           </AuthProvider>
         </OfflineProvider>

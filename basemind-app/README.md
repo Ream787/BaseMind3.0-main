@@ -92,6 +92,43 @@ optional columns store that; "Start again" clears them and hands the choice back
 
 No image is uploaded, generated or hosted anywhere — the badge is drawn by the app.
 
+## Everything else (this branch)
+
+`lab-everything` is a deliberate pile-on: nineteen more features, added in one
+go to see what the app looks like with all of them in it. It is a branch, not
+a direction — `master` is untouched and stays the working app.
+
+**Group** — a roster of the young people (with the medical, allergy and
+dietary notes surfaced as flags rather than buried in a form), patrols,
+attendance registers filled in by one database call, badge progression that
+records requirement sign-offs and not just finished badges, a patrol points
+ledger, meeting programmes with a running clock, and an activity library.
+
+**Camps** — a to-do board with a Blocked column, a duty roster that fills
+itself by rotating patrols, budgets and expenses in integer pence, risk
+assessments scored by likelihood × severity, an incident log, and site
+reviews.
+
+**Board** — a noticeboard with reactions, leader chat on four channels,
+polls, and a photo gallery in a private bucket.
+
+**Equipment** — repair history, stocktakes that snapshot expected quantities
+when counting starts, and a wishlist people vote on.
+
+**Toolkit** — eight things that work with no signal at all: sunrise, sunset,
+civil twilight and moon phase computed locally; British National Grid
+references both ways; a team splitter; a timer; morse (including flashing it
+with the screen); a recipe scaler; a knot reference; and emergency signals.
+
+**Everywhere** — a dashboard, and ⌘K search across pages, kit, people, camps
+and activities.
+
+All of it lives in its own Postgres schema so it can be removed in one line —
+see [`supabase/lab/README.md`](./supabase/lab/README.md) for the setup, which
+is three SQL files and one dropdown in the Supabase dashboard. Until that is
+done the app looks and behaves exactly as it does on `master`; the extra nav
+sections only appear once the schema is reachable.
+
 ## Stack
 
 React 18 + TypeScript + Vite + Tailwind CSS v4 + Radix/shadcn UI components, backed by Supabase
