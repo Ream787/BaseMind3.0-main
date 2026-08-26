@@ -20,6 +20,8 @@ Equipment, camp and food management for a single Scout group, with role-based ac
 - **PDF export** — the whole camp plan, site contact details included, as a printable download
 - **Form filling** — upload an official fillable PDF once, map its boxes to camp data, then
   generate filled copies per camp
+- **Policies** — the group's rule documents, searchable, with an assistant that answers
+  questions by quoting them
 - **Person icons** — everyone gets a little camp badge beside their name, worked out from
   their account so it is there from day one; pick your own emblem and colour, or use your
   initials instead
@@ -44,6 +46,22 @@ To enable it: Supabase dashboard → Edge Functions → create a function named 
 `GEMINI_API_KEY` secret. Without it the button simply errors and the template still works.
 
 Whatever produces it, read the plan before you rely on it.
+
+## Policies and the assistant
+
+Upload the group's policy documents as PDFs; the text is extracted on upload and stored
+alongside the original, so the documents stay searchable — and readable — with no API key.
+
+The **assistant** on that page answers questions from that extracted text and nothing else.
+Every answer carries verbatim quotes, and each quote is checked against the stored document
+before it is shown: a reply quoting something that isn't in your policies is discarded rather
+than displayed. Only Admins and Managers can add or change documents, because an answer is
+only as trustworthy as who can edit what it answers from.
+
+To enable it: Supabase dashboard → Edge Functions → create a function named `policy-chat`,
+paste [`supabase/functions/policy-chat/index.ts`](./supabase/functions/policy-chat/index.ts),
+and set the same `GEMINI_API_KEY` secret. Without it the documents still upload, search and
+open — only the question box errors.
 
 ### Choosing the Gemini model
 
@@ -113,16 +131,19 @@ Open the SQL Editor in your Supabase project and run the migrations in
 | Migration | What it adds |
 |---|---|
 | `0001_init.sql` | `users` and `equipment` tables, signup trigger, RLS policies |
-| `0002_fix_admin_bootstrap.sql` | Lets the first-admin promotion in step 7 actually apply |
+| `0002_fix_admin_bootstrap.sql` | Nothing on a fresh project — see the note in the file |
 | `0003_camps_and_food.sql` | Camping sites, events, packing lists, food store, camp food plans |
 | `0004_equipment_loans.sql` | Borrowing: who has what, and when it's due back |
 | `0005_menus.sql` | Menus, meals and ingredients, plus event headcount |
 | `0006_safety.sql` | Hospital/emergency details per site, and per-camp safety plans |
 | `0007_camp_forms.sql` | Uploaded fillable PDF forms and their field mappings |
+| `0008_feature_flags.sql` | The switches on the admin page for turning features off |
+| `0009_policies.sql` | Policy documents, their extracted text, and the `policies` bucket |
 | `0010_user_icons.sql` | The emblem and colour each person picked for their badge |
 
 If you already set the project up, run whichever ones you haven't yet — the app's calendar,
-sites and food pages will error until `0003` has been applied.
+sites and food pages will error until `0003` has been applied. `0002` and `0010` are safe to
+run twice; the rest are not, so keep track of which you have done.
 
 (If you're using the Supabase CLI locally instead: `supabase link` then `supabase db push`.)
 
