@@ -15,7 +15,10 @@
 
 // Overridable with a GEMINI_MODEL secret, so the model can be changed without
 // editing code. Availability varies by key and changes over time.
-const MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.0-flash";
+// Flash Lite is the cheapest tier and has the most generous free quota,
+// which is what this is picked for. Its thinking level already defaults to
+// minimal, so none of the output budget below is spent on reasoning.
+const MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-3.5-flash-lite";
 
 /** Which models this key can actually use, for when the configured one 404s. */
 async function listUsableModels(apiKey: string): Promise<string> {

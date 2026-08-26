@@ -65,8 +65,11 @@ open — only the question box errors.
 
 ### Choosing the Gemini model
 
-Both functions default to `gemini-2.0-flash`. To use a different one, set a **`GEMINI_MODEL`**
-secret — no code change needed.
+Both functions default to `gemini-3.5-flash-lite`, chosen for the free tier: Flash Lite is the
+cheapest class and gets the most generous free quota. Its thinking level already defaults to
+minimal, so none of the output budget goes on reasoning.
+
+To use a different model, set a **`GEMINI_MODEL`** secret — no code change needed.
 
 If the model name isn't available on your key, the call fails with a 404 and the error names
 the model it tried **and lists the models your key can actually use**, so there's no guessing.
