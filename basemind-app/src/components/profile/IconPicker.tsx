@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef } from "react";
 import { Wand2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,29 +28,46 @@ export function IconPicker({
   /** Applied straight away, so the header updates as you click. */
   onChange: (patch: IconPatch) => void;
 }) {
-  const [saving, setSaving] = useState(false);
+  /**
+   * Counts saves so a late failure can tell whether it is still the current
+   * choice. Without it, an error from the first of two quick taps would revert
+   * to a state the person has already moved on from.
+   */
+  const latestSave = useRef(0);
 
   const current = resolveIcon(profile);
   const usingInitials = !current.emblem;
 
   async function save(patch: IconPatch) {
-    // Optimistic: a picker that waits for a round trip per click feels broken,
-    // and the worst case here is a badge that snaps back with a message.
+    // Optimistic, and deliberately not disabled while it saves: these are
+    // one-tap choices you make several of in a row, and blocking the picker
+    // for a round trip per tap silently swallowed the next one — which is
+    // exactly what "it doesn't do anything" looks like on a slow connection.
     const previous: IconPatch = {
       avatar_emblem: profile.avatar_emblem,
       avatar_colour: profile.avatar_colour,
     };
+    const mine = ++latestSave.current;
     onChange(patch);
-    setSaving(true);
+
     const { error } = await supabase.from("users").update(patch).eq("id", profile.id);
-    setSaving(false);
-    if (error) {
-      onChange(previous);
-      toast.error(error.message);
-    }
+    if (!error) return;
+
+    // Only undo it if nothing has been picked since; otherwise the newer
+    // choice stands and this one is just reported.
+    if (latestSave.current === mine) onChange(previous);
+
+    // The columns are the one piece of this feature that needs setting up, so
+    // name the migration rather than passing on "schema cache" as an answer.
+    const missingColumn = /avatar_(emblem|colour)/.test(error.message);
+    toast.error(
+      missingColumn
+        ? "Your badge can't be saved until migration 0010_user_icons.sql has been run on the database."
+        : error.message,
+    );
   }
 
-  const busy = !online || saving;
+  const busy = !online;
 
   return (
     <section className="flex flex-col gap-4 border-t pt-6">
