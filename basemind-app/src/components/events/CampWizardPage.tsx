@@ -187,7 +187,11 @@ export function CampWizardPage() {
         ))}
       </ol>
 
-      <div className="rounded-lg border bg-card p-4">
+      {/* p-6 and a minimum height from sm up. On a tablet the phone's 16px
+          padding reads as cramped against a 720px-wide card, and the card
+          jumping between ~130px on Site and ~450px on Equipment made the Back
+          and Next buttons move under your thumb between steps. */}
+      <div className="rounded-lg border bg-card p-4 sm:min-h-[22rem] sm:p-6">
         {current === "Camp" && (
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
@@ -322,7 +326,11 @@ export function CampWizardPage() {
             <p className="text-sm text-muted-foreground">
               Tick what you&apos;re taking. Anything fully out on loan is greyed out.
             </p>
-            <div className="max-h-96 overflow-y-auto rounded-lg border">
+            {/* 384px is right on a phone but wastes a tablet, where it left a
+                short box floating above 400px of empty page. Capped against the
+                viewport from sm up so it grows into the space without ever
+                pushing Next below the fold. */}
+            <div className="max-h-96 overflow-y-auto rounded-lg border sm:max-h-[min(34rem,55vh)]">
               {equipment.length === 0 ? (
                 <p className="p-4 text-sm text-muted-foreground">No equipment in the inventory.</p>
               ) : (
@@ -397,7 +405,11 @@ export function CampWizardPage() {
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-3">
+      {/* Split apart on a phone, together on the right from sm up. Spread
+          across a tablet they sat 593px apart — one at each edge of the card —
+          which is a hand's travel between the step you just did and the one
+          you want next. */}
+      <div className="flex items-center justify-between gap-3 sm:justify-end">
         <Button
           variant="outline"
           onClick={() => setStep((s) => Math.max(0, s - 1))}
@@ -426,11 +438,19 @@ export function CampWizardPage() {
   );
 }
 
+/**
+ * One line of the review summary.
+ *
+ * Label and value sit at opposite ends on a phone, where the row is narrow
+ * enough to read as a pair. On a tablet that same rule opened 513px of blank
+ * space between them and left the eye to jump the gap, so from sm up the label
+ * takes a fixed column and the value starts right beside it.
+ */
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b pb-2 last:border-b-0">
+    <div className="flex items-baseline justify-between gap-4 border-b pb-2 last:border-b-0 sm:grid sm:grid-cols-[10rem_1fr]">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-right font-medium">{value}</dd>
+      <dd className="text-right font-medium sm:text-left">{value}</dd>
     </div>
   );
 }
