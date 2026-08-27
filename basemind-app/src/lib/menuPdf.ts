@@ -3,6 +3,7 @@ import type { jsPDF } from "jspdf";
 import type { FoodItem, Menu, MenuMeal, MenuMealItem } from "@/types/database";
 import { aggregateMenuRequirements, mealsByDay } from "@/lib/menus";
 import { roundQuantity } from "@/lib/shoppingList";
+import { drawFooterLogo } from "@/lib/pdfLogo";
 
 type PdfDoc = jsPDF & { lastAutoTable?: { finalY: number } };
 
@@ -175,7 +176,7 @@ function addFooters(doc: PdfDoc): void {
     doc.setPage(i);
     doc.setFontSize(8);
     doc.setTextColor(140);
-    doc.text("BaseMind", MARGIN, pageHeight - 8);
+    drawFooterLogo(doc, MARGIN, pageHeight - 8);
     doc.text(`Page ${i} of ${pageCount}`, pageWidth - MARGIN, pageHeight - 8, { align: "right" });
     doc.setTextColor(0);
   }

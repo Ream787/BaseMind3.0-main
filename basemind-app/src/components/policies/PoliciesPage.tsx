@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
+import { useOffline } from "@/context/OfflineContext";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
 import { isSupportedDocument, UnreadableDocumentError } from "@/lib/documentText";
 import {
@@ -48,6 +49,7 @@ function hostOf(url: string): string {
 
 export function PoliciesPage() {
   const { hasRole, profile } = useAuth();
+  const { online } = useOffline();
   const { rows: policies, loading } = useRealtimeTable("policies", { orderBy: "title" });
 
   const fileInput = useRef<HTMLInputElement>(null);
@@ -219,11 +221,20 @@ export function PoliciesPage() {
                 if (file) handleUpload(file);
               }}
             />
-            <Button variant="outline" onClick={() => setLinkOpen(true)} disabled={uploading}>
+            <Button
+              variant="outline"
+              onClick={() => setLinkOpen(true)}
+              disabled={uploading || !online}
+              title={online ? undefined : "Needs a connection — the file is fetched by the server"}
+            >
               <Link2 className="size-4" />
               Add from link
             </Button>
-            <Button onClick={() => fileInput.current?.click()} disabled={uploading}>
+            <Button
+              onClick={() => fileInput.current?.click()}
+              disabled={uploading || !online}
+              title={online ? undefined : "Needs a connection to store the document"}
+            >
               {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
               {uploading ? "Reading…" : "Upload"}
             </Button>
@@ -302,7 +313,8 @@ export function PoliciesPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        disabled={opening === policy.id}
+                        disabled={opening === policy.id || !online}
+                        title={online ? undefined : "Needs a connection — the file lives on the server"}
                         onClick={() => openOriginal(policy)}
                       >
                         Open
@@ -313,8 +325,12 @@ export function PoliciesPage() {
                         variant="ghost"
                         size="icon"
                         aria-label={`Check ${policy.title} for an update`}
-                        title="Download it again from the link and replace this copy"
-                        disabled={refreshing === policy.id}
+                        title={
+                          online
+                            ? "Download it again from the link and replace this copy"
+                            : "Needs a connection to re-download"
+                        }
+                        disabled={refreshing === policy.id || !online}
                         onClick={() => refreshFromSource(policy)}
                       >
                         <RefreshCw

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { AlertTriangle, Quote, SearchX, Send, Sparkles } from "lucide-react";
 
+import { useOffline } from "@/context/OfflineContext";
 import { isPending, type ChatMessage } from "@/lib/policyChats";
 import type { Policy } from "@/types/database";
 import { Button } from "@/components/ui/button";
@@ -50,7 +51,22 @@ export function PolicyChat({
   asking: boolean;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
+  const { online } = useOffline();
   const readable = policies.filter((p) => p.content.trim().length > 0);
+
+  /**
+   * Why the question box is closed, if it is.
+   *
+   * The assistant is the one thing here that can't be queued for later the way
+   * an added row can: the answer has to be generated and checked against the
+   * documents before it can be shown. So offline it's shut rather than taking
+   * a question it would only drop.
+   */
+  const unavailable = !online
+    ? "You're offline — the assistant needs a connection"
+    : readable.length === 0
+      ? "Add a policy document first"
+      : null;
 
   // Follow the conversation down as it grows, the way a chat app does.
   useEffect(() => {
@@ -59,7 +75,7 @@ export function PolicyChat({
 
   function submit(value: string) {
     const trimmed = value.trim();
-    if (!trimmed || asking || readable.length === 0) return;
+    if (!trimmed || asking || unavailable) return;
     onAsk(trimmed);
   }
 
@@ -83,6 +99,7 @@ export function PolicyChat({
                 message={message}
                 total={readable.length}
                 asking={asking}
+                offline={!online}
                 onAsk={submit}
               />
             ),
@@ -99,16 +116,12 @@ export function PolicyChat({
         }}
       >
         <Input
-          placeholder={
-            readable.length === 0
-              ? "Add a policy document first"
-              : "e.g. What supervision is needed for axe work?"
-          }
+          placeholder={unavailable ?? "e.g. What supervision is needed for axe work?"}
           value={question}
           onChange={(e) => onQuestionChange(e.target.value)}
-          disabled={asking || readable.length === 0}
+          disabled={asking || unavailable !== null}
         />
-        <Button type="submit" disabled={asking || !question.trim() || readable.length === 0}>
+        <Button type="submit" disabled={asking || !question.trim() || unavailable !== null}>
           <Send className="size-4" />
           <span className="sr-only sm:not-sr-only">Ask</span>
         </Button>
@@ -140,11 +153,13 @@ function Answer({
   message,
   total,
   asking,
+  offline,
   onAsk,
 }: {
   message: ChatMessage;
   total: number;
   asking: boolean;
+  offline: boolean;
   onAsk: (question: string) => void;
 }) {
   if (message.error) {
@@ -203,7 +218,7 @@ function Answer({
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={asking}
+                    disabled={asking || offline}
                     onClick={() => onAsk(suggestion)}
                     className="h-auto whitespace-normal py-1.5 text-left text-xs"
                   >

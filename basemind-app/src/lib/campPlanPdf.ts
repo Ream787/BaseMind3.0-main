@@ -4,6 +4,7 @@ import type { jsPDF } from "jspdf";
 import type { CampEvent, CampingSite, Equipment } from "@/types/database";
 import type { FoodPlanLine } from "@/lib/shoppingList";
 import { roundQuantity } from "@/lib/shoppingList";
+import { drawFooterLogo } from "@/lib/pdfLogo";
 
 /** jspdf-autotable records where the last table ended on the document. */
 type PdfDoc = jsPDF & { lastAutoTable?: { finalY: number } };
@@ -249,7 +250,8 @@ function addFooters(doc: PdfDoc): void {
     doc.setPage(i);
     doc.setFontSize(8);
     doc.setTextColor(140);
-    doc.text(`BaseMind · printed ${printed}`, MARGIN, pageHeight - 8);
+    const textX = drawFooterLogo(doc, MARGIN, pageHeight - 8);
+    doc.text(`printed ${printed}`, textX, pageHeight - 8);
     doc.text(`Page ${i} of ${pageCount}`, pageWidth - MARGIN, pageHeight - 8, { align: "right" });
     doc.setTextColor(0);
   }
