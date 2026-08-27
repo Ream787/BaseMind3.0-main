@@ -14,6 +14,16 @@ export type RawCitation = {
 export type RawAnswer = {
   answer?: string;
   citations?: RawCitation[];
+  /**
+   * The model's own verdict on whether the documents answered the question.
+   *
+   * Optional because the Edge Function is deployed by hand: a browser running
+   * this code may still be talking to a version that never sends it. A missing
+   * flag therefore has to mean "work it out from the prose", not "not covered".
+   */
+  covered?: boolean;
+  /** Questions these documents *can* answer, offered when this one wasn't. */
+  related?: string[];
 };
 
 export type VerifiedCitation = {
@@ -34,6 +44,13 @@ export type CheckedAnswer = {
   rejected: RejectedCitation[];
   /** True when the answer made claims but none could be traced to a policy. */
   unsupported: boolean;
+  /** False when the documents simply don't address what was asked. */
+  covered: boolean;
+  /**
+   * Questions worth asking instead. Only populated when `covered` is false —
+   * a dead end is the one moment where suggestions are help rather than clutter.
+   */
+  related: string[];
 };
 
 /**
@@ -105,14 +122,51 @@ export function verifyAnswer(raw: RawAnswer, policies: PolicySource[]): CheckedA
 
   const answer = (raw.answer ?? "").trim();
 
+  // The model's own flag is the better signal, so it wins when it's there.
+  // Reading the prose stays as the fallback for replies that predate the flag.
+  const covered =
+    typeof raw.covered === "boolean" ? raw.covered : !saysItDoesNotKnow(answer);
+
   return {
     answer,
     citations,
     rejected,
-    // An answer that says it found nothing is fine unsupported; one that
-    // asserts something without a usable citation is not.
-    unsupported: answer.length > 0 && citations.length === 0 && !saysItDoesNotKnow(answer),
+    covered,
+    related: covered ? [] : cleanSuggestions(raw.related),
+    // An answer that says it found nothing is fine uncited; one that asserts
+    // something without a usable citation is not.
+    unsupported: answer.length > 0 && citations.length === 0 && covered,
   };
+}
+
+/**
+ * Tidies the suggested follow-up questions before they become buttons.
+ *
+ * They come from the model, so they arrive blank, duplicated, or as a
+ * paragraph wearing a question mark. Anything that wouldn't read as a question
+ * on a button is dropped rather than shown badly — three good suggestions are
+ * worth more than six padded ones, which is why the list is capped short.
+ */
+function cleanSuggestions(related: unknown): string[] {
+  if (!Array.isArray(related)) return [];
+
+  const seen = new Set<string>();
+  const questions: string[] = [];
+
+  for (const item of related) {
+    if (typeof item !== "string") continue;
+    const question = item.replace(/\s+/g, " ").trim();
+    if (question.length < 8 || question.length > 120) continue;
+
+    const key = normalizeForMatch(question);
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    questions.push(question);
+    if (questions.length === 3) break;
+  }
+
+  return questions;
 }
 
 /**
