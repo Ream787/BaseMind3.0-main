@@ -81,8 +81,13 @@ export function useRealtimeTable<T extends TableName>(
     }
     load();
 
+    // The channel name has to be unique per hook instance, not per table.
+    // Supabase throws "cannot add postgres_changes callbacks after
+    // subscribe()" when a second caller opens a channel of the same name,
+    // so two components reading one table on the same screen — a list and a
+    // detail panel, say — would take the page down.
     const channel = supabase
-      .channel(`${table}-changes`)
+      .channel(`${table}-changes-${crypto.randomUUID()}`)
       .on("postgres_changes", { event: "*", schema: "public", table }, (payload) => {
         setRows((prev) => {
           const change =

@@ -44,8 +44,13 @@ export function EquipmentProvider({ children }: { children: ReactNode }) {
     // Realtime keeps every active user's list in sync without a manual
     // refresh — mutations below don't touch local state themselves,
     // they rely on the event this subscription receives.
+    // Unique per mount, not a fixed name. removeChannel is asynchronous, so
+    // remounting this provider — which happens on every move between the
+    // inventory and the boxes pages — could re-subscribe under the same name
+    // before the old channel had finished going away, and Supabase throws
+    // rather than tolerating that.
     const channel = supabase
-      .channel("equipment-changes")
+      .channel(`equipment-changes-${crypto.randomUUID()}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "equipment" },

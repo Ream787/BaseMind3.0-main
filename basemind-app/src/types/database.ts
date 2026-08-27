@@ -32,11 +32,24 @@ export type Equipment = {
   date_last_checked: string | null;
   next_check_date: string | null;
   checked_by: string | null;
+  /** Colour of the physical band marking this item, where the group uses one. */
+  label_colour: string | null;
+  /** Which box it lives in, if it lives in one. */
+  box_id: string | null;
   created_at: string;
   updated_at: string;
 };
 
-export type NewEquipment = Omit<Equipment, "id" | "created_at" | "updated_at">;
+/**
+ * Both label_colour and box_id are optional: the database defaults them to
+ * null, and most kit is neither banded nor boxed. Requiring them would mean
+ * every form that adds an item has to say "no" to both.
+ */
+export type NewEquipment = Omit<
+  Equipment,
+  "id" | "created_at" | "updated_at" | "label_colour" | "box_id"
+> &
+  Partial<Pick<Equipment, "label_colour" | "box_id">>;
 export type EquipmentUpdate = Partial<NewEquipment>;
 
 export type EquipmentLoan = {
@@ -158,6 +171,29 @@ export type PolicyChatMessage = {
 };
 
 export type NewPolicyChatMessage = Omit<PolicyChatMessage, "id" | "created_at">;
+
+export type EquipmentBox = {
+  id: string;
+  /** What the QR sticker encodes. Unique, case-insensitively. */
+  code: string;
+  name: string;
+  location: string;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Only the code is required; the database names and files a new box itself. */
+export type NewEquipmentBox = Omit<
+  EquipmentBox,
+  "id" | "created_at" | "updated_at" | "name" | "location" | "notes" | "created_by"
+> &
+  Partial<Pick<EquipmentBox, "name" | "location" | "notes" | "created_by">>;
+
+export type EquipmentBoxUpdate = Partial<
+  Pick<EquipmentBox, "name" | "location" | "notes">
+>;
 
 export type FeatureKey =
   | "equipment"
@@ -296,6 +332,7 @@ export type Database = {
         Partial<UserProfile>
       >;
       equipment: TableDef<Equipment, NewEquipment, EquipmentUpdate>;
+      equipment_boxes: TableDef<EquipmentBox, NewEquipmentBox, EquipmentBoxUpdate>;
       equipment_loans: TableDef<EquipmentLoan, NewEquipmentLoan>;
       camping_sites: TableDef<CampingSite, NewCampingSite>;
       events: TableDef<CampEvent, NewCampEvent>;

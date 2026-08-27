@@ -18,6 +18,12 @@ import { EquipmentProvider } from "@/context/EquipmentContext";
 const EquipmentPage = lazy(() =>
   import("@/components/equipment/EquipmentPage").then((m) => ({ default: m.EquipmentPage })),
 );
+const BoxesPage = lazy(() =>
+  import("@/components/boxes/BoxesPage").then((m) => ({ default: m.BoxesPage })),
+);
+const BoxDetailPage = lazy(() =>
+  import("@/components/boxes/BoxDetailPage").then((m) => ({ default: m.BoxDetailPage })),
+);
 const LoansPage = lazy(() =>
   import("@/components/loans/LoansPage").then((m) => ({ default: m.LoansPage })),
 );
@@ -101,6 +107,26 @@ export const router = createBrowserRouter([
               <EquipmentPage />
             </EquipmentProvider>
           </Lazy>
+        ),
+      },
+      {
+        path: "boxes",
+        element: (
+          <Gate feature="equipment">
+            <EquipmentProvider>
+              <BoxesPage />
+            </EquipmentProvider>
+          </Gate>
+        ),
+      },
+      {
+        path: "boxes/:code",
+        element: (
+          <Gate feature="equipment">
+            <EquipmentProvider>
+              <BoxDetailPage />
+            </EquipmentProvider>
+          </Gate>
         ),
       },
       { path: "loans", element: <Gate feature="loans"><LoansPage /></Gate> },
