@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
+import { supabase } from "@/lib/supabase/client";
 import { useEquipment } from "@/context/EquipmentContext";
 import type { Equipment, EquipmentCondition } from "@/types/database";
 import { Button } from "@/components/ui/button";
@@ -120,7 +121,21 @@ export function EquipmentFormDialog({
         await updateEquipment(equipment.id, payload);
         toast.success(`${payload.name} updated`);
       } else {
-        await addEquipment(payload);
+        const created = await addEquipment(payload);
+        // File the new item in the room that was chosen, so it appears there
+        // straight away rather than sitting under "not placed" waiting for
+        // somebody to notice. Where things are lives in placements now; this
+        // form's Room field is the answer to "where does it go to start with".
+        if (created && payload.location && payload.quantity > 0) {
+          const { error } = await supabase.rpc("place_equipment", {
+            p_equipment_id: created.id,
+            p_box_id: null,
+            p_location: payload.location,
+            p_quantity: payload.quantity,
+          });
+          // The item exists and is correct; only its filing failed.
+          if (error) toast.error(`Added, but couldn't file it: ${error.message}`);
+        }
         toast.success(`${payload.name} added`);
       }
       onOpenChange(false);

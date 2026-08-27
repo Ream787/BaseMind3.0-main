@@ -4,7 +4,7 @@
 -- The group's real inventory, taken from "14th DELP Equipment List.xlsx"
 -- (sheets: Pioneering, Camping Equipment, Ropes, Tools, Kitchen).
 --
--- Run in the Supabase SQL Editor after migration 0012.
+-- Run in the Supabase SQL Editor after migrations 0012 and 0015.
 --
 -- Safe to re-run: each row is inserted only if nothing of that name is
 -- already there, so running it twice adds nothing and — importantly —
@@ -127,6 +127,18 @@ select v.name, v.category, 'Unassigned', v.quantity, 'Good', v.label_colour, v.n
  where not exists (
    select 1 from public.equipment e where lower(e.name) = lower(v.name)
  );
+
+-- Everything this file adds starts life loose in its room. Where kit is
+-- lives in placements now, and an item with none would sit under "not
+-- placed" instead of appearing in the room it was just filed in.
+insert into public.equipment_placements (equipment_id, location, quantity)
+select e.id, e.location, e.quantity
+  from public.equipment e
+ where e.location = 'Unassigned'
+   and e.quantity > 0
+   and not exists (
+     select 1 from public.equipment_placements p where p.equipment_id = e.id
+   );
 
 commit;
 

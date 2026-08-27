@@ -39,7 +39,26 @@ export type VariantFinding = {
   why: string;
 };
 
-export type Finding = DuplicateFinding | VariantFinding;
+/**
+ * Two rows that are the same kit under different names — "Rope" and "Ropes",
+ * "Mallet" and "Frapping malet".
+ *
+ * Worth acting on now in a way it wasn't before: merging used to force the
+ * result into one room, so a Rope in the loft and Ropes in the container
+ * could not be reconciled without losing something. Placements mean the
+ * merged row keeps both, so the only thing lost is the duplicate name.
+ */
+export type ItemVariantFinding = {
+  kind: "item-variants";
+  /** The name to keep, and the row that already carries it. */
+  canonical: string;
+  canonicalId: string;
+  /** The rows to merge into it. */
+  variants: { id: string; name: string }[];
+  why: string;
+};
+
+export type Finding = DuplicateFinding | VariantFinding | ItemVariantFinding;
 
 const norm = (v: string | null) => (v ?? "").replace(/\s+/g, " ").trim().toLowerCase();
 
@@ -165,7 +184,10 @@ export function verifyFindings(
   // Don't repeat something the exact pass already found.
   const seen = new Set(
     already
-      .filter((f): f is VariantFinding => f.kind !== "duplicate")
+      .filter(
+        (f): f is VariantFinding =>
+          f.kind === "location-variants" || f.kind === "category-variants",
+      )
       .flatMap((f) => f.variants.map((v) => norm(v))),
   );
 
@@ -213,10 +235,69 @@ export function verifyFindings(
   return out;
 }
 
+/**
+ * Checks the model's item-name suggestions against the real inventory.
+ *
+ * Every name has to belong to a row that exists, the names must differ, and
+ * a row may only be merged away once — the model happily suggests chains like
+ * "Rope -> Ropes" and "Ropes -> Rope" given the chance, and applying both
+ * would delete the survivor.
+ */
+export function verifyItemFindings(
+  raw: RawFinding[],
+  equipment: { id: string; name: string }[],
+): ItemVariantFinding[] {
+  const byName = new Map<string, { id: string; name: string }>();
+  for (const item of equipment) {
+    // First row wins a name, so two rows sharing one are handled by the
+    // exact duplicate pass rather than here.
+    if (!byName.has(norm(item.name))) byName.set(norm(item.name), item);
+  }
+
+  const spokenFor = new Set<string>();
+  const out: ItemVariantFinding[] = [];
+
+  for (const finding of Array.isArray(raw) ? raw : []) {
+    if (!finding || typeof finding !== "object") continue;
+    if (finding.kind !== "item-variants") continue;
+
+    const canonicalName = typeof finding.canonical === "string" ? finding.canonical.trim() : "";
+    const canonical = byName.get(norm(canonicalName));
+    if (!canonical || spokenFor.has(canonical.id)) continue;
+
+    const variants = (Array.isArray(finding.variants) ? finding.variants : [])
+      .filter((v): v is string => typeof v === "string")
+      .map((v) => byName.get(norm(v)))
+      .filter(
+        (v): v is { id: string; name: string } =>
+          !!v && v.id !== canonical.id && !spokenFor.has(v.id),
+      );
+
+    if (variants.length === 0) continue;
+
+    spokenFor.add(canonical.id);
+    for (const v of variants) spokenFor.add(v.id);
+
+    out.push({
+      kind: "item-variants",
+      canonical: canonical.name,
+      canonicalId: canonical.id,
+      variants: variants.map((v) => ({ id: v.id, name: v.name })),
+      why: (finding.why ?? "").trim() || "Looks like the same kit under two names.",
+    });
+  }
+
+  return out;
+}
+
 /** A short, plain description of what applying a finding would do. */
 export function describeFix(finding: Finding): string {
   if (finding.kind === "duplicate") {
     return `Merge ${finding.itemIds.length} rows into one, adding their quantities together.`;
+  }
+  if (finding.kind === "item-variants") {
+    const names = finding.variants.map((v) => `"${v.name}"`).join(", ");
+    return `Merge ${names} into "${finding.canonical}". Quantities add up and every room and box each was in is kept.`;
   }
   const list = finding.variants.map((v) => `"${v}"`).join(", ");
   const noun = finding.kind === "location-variants" ? "item" : "item";

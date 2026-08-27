@@ -34,22 +34,19 @@ export type Equipment = {
   checked_by: string | null;
   /** Colour of the physical band marking this item, where the group uses one. */
   label_colour: string | null;
-  /** Which box it lives in, if it lives in one. */
-  box_id: string | null;
   created_at: string;
   updated_at: string;
 };
 
 /**
- * Both label_colour and box_id are optional: the database defaults them to
- * null, and most kit is neither banded nor boxed. Requiring them would mean
- * every form that adds an item has to say "no" to both.
+ * label_colour is optional: the database defaults it to null and most kit
+ * carries no band. Where an item lives is a placement, not a column here.
  */
 export type NewEquipment = Omit<
   Equipment,
-  "id" | "created_at" | "updated_at" | "label_colour" | "box_id"
+  "id" | "created_at" | "updated_at" | "label_colour"
 > &
-  Partial<Pick<Equipment, "label_colour" | "box_id">>;
+  Partial<Pick<Equipment, "label_colour">>;
 export type EquipmentUpdate = Partial<NewEquipment>;
 
 export type EquipmentLoan = {
@@ -195,6 +192,39 @@ export type EquipmentBoxUpdate = Partial<
   Pick<EquipmentBox, "name" | "location" | "notes">
 >;
 
+/**
+ * How many of an item are in one place.
+ *
+ * Exactly one of box_id and location is set: kit is either in a box, or
+ * loose in a room. A boxed placement takes its room from the box, so moving
+ * a box moves everything in it without touching a single placement.
+ */
+export type EquipmentPlacement = {
+  id: string;
+  equipment_id: string;
+  box_id: string | null;
+  location: string | null;
+  quantity: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NewEquipmentPlacement = Omit<
+  EquipmentPlacement,
+  "id" | "created_at" | "updated_at"
+>;
+
+export type MazeRun = {
+  id: string;
+  user_id: string;
+  seconds: number;
+  moves: number;
+  size: number;
+  completed_at: string;
+};
+
+export type NewMazeRun = Omit<MazeRun, "id" | "completed_at">;
+
 export type FeatureKey =
   | "equipment"
   | "loans"
@@ -333,6 +363,8 @@ export type Database = {
       >;
       equipment: TableDef<Equipment, NewEquipment, EquipmentUpdate>;
       equipment_boxes: TableDef<EquipmentBox, NewEquipmentBox, EquipmentBoxUpdate>;
+      equipment_placements: TableDef<EquipmentPlacement, NewEquipmentPlacement>;
+      maze_runs: TableDef<MazeRun, NewMazeRun>;
       equipment_loans: TableDef<EquipmentLoan, NewEquipmentLoan>;
       camping_sites: TableDef<CampingSite, NewCampingSite>;
       events: TableDef<CampEvent, NewCampEvent>;
@@ -355,6 +387,15 @@ export type Database = {
       apply_menu_preset: {
         Args: { preset_id: string; target_event_id: string; target_headcount?: number | null };
         Returns: string;
+      };
+      place_equipment: {
+        Args: {
+          p_equipment_id: string;
+          p_box_id: string | null;
+          p_location: string | null;
+          p_quantity: number;
+        };
+        Returns: void;
       };
       merge_equipment: {
         Args: { keep_id: string; drop_id: string };

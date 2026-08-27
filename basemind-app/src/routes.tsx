@@ -57,6 +57,9 @@ const AssistantPage = lazy(() =>
 const AdminPage = lazy(() =>
   import("@/components/admin/AdminPage").then((m) => ({ default: m.AdminPage })),
 );
+const MazeGame = lazy(() =>
+  import("@/components/easteregg/MazeGame").then((m) => ({ default: m.MazeGame })),
+);
 const ProfilePage = lazy(() =>
   import("@/components/profile/ProfilePage").then((m) => ({ default: m.ProfilePage })),
 );
@@ -131,6 +134,9 @@ export const router = createBrowserRouter([
       { path: "assistant", element: <Gate feature="policies"><AssistantPage /></Gate> },
       { path: "policies", element: <Gate feature="policies"><PoliciesPage /></Gate> },
       { path: "profile", element: <Lazy><ProfilePage /></Lazy> },
+      // Unlisted on purpose: reached by tapping the wordmark ten times, or
+      // by typing the URL if somebody lets that slip.
+      { path: "maze", element: <Lazy><MazeGame /></Lazy> },
       {
         path: "admin",
         element: (

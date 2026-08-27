@@ -7,7 +7,8 @@ interface EquipmentContextType {
   equipment: Equipment[];
   loading: boolean;
   error: string | null;
-  addEquipment: (input: NewEquipment) => Promise<void>;
+  /** Returns the created row, so the caller can file it in a room. */
+  addEquipment: (input: NewEquipment) => Promise<Equipment>;
   updateEquipment: (id: string, patch: EquipmentUpdate) => Promise<void>;
   deleteEquipment: (id: string) => Promise<void>;
 }
@@ -81,9 +82,14 @@ export function EquipmentProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  async function addEquipment(input: NewEquipment) {
-    const { error: insertError } = await supabase.from("equipment").insert(input);
+  async function addEquipment(input: NewEquipment): Promise<Equipment> {
+    const { data, error: insertError } = await supabase
+      .from("equipment")
+      .insert(input)
+      .select()
+      .single();
     if (insertError) throw insertError;
+    return data;
   }
 
   async function updateEquipment(id: string, patch: EquipmentUpdate) {

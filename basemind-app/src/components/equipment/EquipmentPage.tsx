@@ -33,6 +33,14 @@ import { EquipmentGroupGrid } from "@/components/equipment/EquipmentGroupGrid";
 import { EquipmentCleanupDialog } from "@/components/equipment/EquipmentCleanupDialog";
 import { QrScannerDialog } from "@/components/boxes/QrScannerDialog";
 import { generateBoxCode } from "@/lib/boxes";
+import {
+  byEquipment,
+  describePlacements,
+  looseInRoom,
+  roomKey,
+  roomOf,
+  roomsInUse,
+} from "@/lib/placements";
 import { LoanFormDialog } from "@/components/loans/LoanFormDialog";
 import { SectionTabs, EQUIPMENT_TABS } from "@/components/layout/SectionTabs";
 import { groupKeyFor, UNGROUPED_LABEL, type GroupBy } from "@/lib/groupEquipment";
@@ -80,6 +88,7 @@ export function EquipmentPage() {
 
   const { rows: loans } = useRealtimeTable("equipment_loans");
   const { rows: boxes } = useRealtimeTable("equipment_boxes", { orderBy: "name" });
+  const { rows: placements } = useRealtimeTable("equipment_placements");
 
   const canEdit = hasRole(["Admin", "Manager", "Member"]);
   const canDelete = hasRole(["Admin", "Manager"]);
@@ -127,11 +136,18 @@ export function EquipmentPage() {
     return filtered.filter((item) => groupKeyFor(item, view) === openGroup.key);
   }, [filtered, view, openGroup]);
 
+  const boxesById = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
+  const equipmentById = useMemo(
+    () => new Map(equipment.map((e) => [e.id, e])),
+    [equipment],
+  );
+  const placementsByItem = useMemo(() => byEquipment(placements), [placements]);
+
   /** Boxes per room, keyed the way the room grid keys its groups. */
   const boxesByRoom = useMemo(() => {
     const map = new Map<string, typeof boxes>();
     for (const box of boxes) {
-      const key = (box.location.trim() || UNGROUPED_LABEL.location).toLowerCase();
+      const key = roomKey(box.location.trim() || UNGROUPED_LABEL.location);
       const bucket = map.get(key);
       if (bucket) bucket.push(box);
       else map.set(key, [box]);
@@ -144,15 +160,36 @@ export function EquipmentPage() {
     [boxesByRoom],
   );
 
-  /** Rooms that hold a box but nothing loose still belong in the grid. */
-  const roomsWithBoxes = useMemo(
-    () =>
-      boxes.map((box) => {
-        const name = box.location.trim() || UNGROUPED_LABEL.location;
-        return { key: name.toLowerCase(), name };
-      }),
-    [boxes],
-  );
+  /**
+   * The rooms, built from placements rather than from a column on the item.
+   *
+   * This is what lets four tents be in the loft and two in the container:
+   * grouping by item.location can only ever put a row in one bucket, and the
+   * whole point of placements is that one item is in several places.
+   */
+  const roomGroups = useMemo(() => {
+    if (view !== "location") return undefined;
+
+    const visible = new Set(filtered.map((item) => item.id));
+    const rooms = roomsInUse(placements, boxes);
+
+    return rooms.map(({ key, name }) => {
+      const inRoom = placements.filter((p) => {
+        const room = roomOf(p, boxesById);
+        return room !== null && roomKey(room) === key && visible.has(p.equipment_id);
+      });
+      const items = [...new Set(inRoom.map((p) => p.equipment_id))]
+        .map((id) => equipmentById.get(id))
+        .filter((item): item is (typeof equipment)[number] => !!item);
+      return {
+        key,
+        name,
+        items,
+        totalQuantity: inRoom.reduce((sum, p) => sum + p.quantity, 0),
+        needsAttention: items.filter((item) => item.condition !== "Good").length,
+      };
+    });
+  }, [view, filtered, placements, boxes, boxesById, equipmentById]);
 
   const openRoomBoxes = useMemo(
     () => (view === "location" && openGroup ? (boxesByRoom.get(openGroup.key) ?? []) : []),
@@ -161,24 +198,36 @@ export function EquipmentPage() {
 
   const itemCountByBox = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const item of equipment) {
-      if (item.box_id) counts.set(item.box_id, (counts.get(item.box_id) ?? 0) + 1);
+    for (const p of placements) {
+      if (p.box_id) counts.set(p.box_id, (counts.get(p.box_id) ?? 0) + 1);
     }
     return counts;
-  }, [equipment]);
+  }, [placements]);
 
   /**
-   * Inside a room, kit that is in a box is shown in its box rather than
-   * again in the loose list — that is what makes a box a section of the room
-   * rather than a second copy of it. Every other view still shows everything.
+   * Inside a room, kit that is in one of its boxes is shown in that box
+   * rather than again below it — that is what makes a box a subdivision of
+   * the room rather than a copy of it.
    */
-  const looseItems = useMemo(
-    () =>
-      view === "location" && openGroup
-        ? visibleItems.filter((item) => !item.box_id)
-        : visibleItems,
-    [visibleItems, view, openGroup],
-  );
+  const looseItems = useMemo(() => {
+    if (view !== "location" || !openGroup) return visibleItems;
+    const visible = new Set(filtered.map((item) => item.id));
+    return looseInRoom(openGroup.name, placements, equipmentById)
+      .map(({ item }) => item)
+      .filter((item) => visible.has(item.id));
+  }, [view, openGroup, placements, equipmentById, visibleItems, filtered]);
+
+  /** One line per item saying where its units actually are. */
+  const placementSummary = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of equipment) {
+      map.set(
+        item.id,
+        describePlacements(item, placementsByItem.get(item.id) ?? [], boxesById),
+      );
+    }
+    return map;
+  }, [equipment, placementsByItem, boxesById]);
 
   function changeView(next: View) {
     setView(next);
@@ -202,7 +251,10 @@ export function EquipmentPage() {
 
   async function confirmDelete() {
     if (!deleteTarget) return;
-    const { error: deleteError } = await supabase.from("equipment").delete().eq("id", deleteTarget.id);
+    const { error: deleteError } = await supabase
+      .from("equipment")
+      .delete()
+      .eq("id", deleteTarget.id);
     if (deleteError) {
       toast.error(deleteError.message);
     } else {
@@ -406,7 +458,7 @@ export function EquipmentPage() {
           groupBy={view}
           onSelect={setOpenGroup}
           boxCounts={view === "location" ? boxCounts : undefined}
-          alwaysShow={view === "location" ? roomsWithBoxes : undefined}
+          groups={roomGroups}
         />
       ) : (
         <>
@@ -470,6 +522,7 @@ export function EquipmentPage() {
             onLend={openLendDialog}
             onCheck={markChecked}
             checkingId={checkingId}
+            placementSummary={placementSummary}
           />
         </>
       )}

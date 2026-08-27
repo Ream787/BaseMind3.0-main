@@ -33,6 +33,12 @@ interface EquipmentTableProps {
   onDelete: (equipment: Equipment) => void;
   onLend: (equipment: Equipment) => void;
   onCheck: (equipment: Equipment) => void;
+  /**
+   * Per item, a line saying where its units are — "Loft 4 · Container 2".
+   * Replaces the single Location column, which could only ever name one
+   * place and so could not describe kit split across two.
+   */
+  placementSummary?: Map<string, string>;
   /** Id currently being stamped, so its button can show it is working. */
   checkingId: string | null;
 }
@@ -63,6 +69,7 @@ export function EquipmentTable({
   onLend,
   onCheck,
   checkingId,
+  placementSummary,
 }: EquipmentTableProps) {
   if (items.length === 0) {
     return (
@@ -111,7 +118,9 @@ export function EquipmentTable({
                     </span>
                   )}
                 </Detail>
-                <Detail label="Location">{item.location}</Detail>
+                <Detail label="Where">
+                  {placementSummary?.get(item.id) ?? item.location}
+                </Detail>
                 {item.next_check_date && (
                   <Detail label="Next check">{item.next_check_date}</Detail>
                 )}
@@ -175,7 +184,7 @@ export function EquipmentTable({
               <TableHead>Category</TableHead>
               <TableHead>Qty</TableHead>
               <TableHead>Available</TableHead>
-              <TableHead>Location</TableHead>
+              <TableHead>Where</TableHead>
               <TableHead>Condition</TableHead>
               <TableHead>Checked by</TableHead>
               <TableHead>Next check</TableHead>
@@ -200,7 +209,11 @@ export function EquipmentTable({
                       </span>
                     )}
                   </TableCell>
-                  <TableCell>{item.location}</TableCell>
+                  <TableCell className="max-w-56">
+                    <span className="block truncate" title={placementSummary?.get(item.id)}>
+                      {placementSummary?.get(item.id) ?? item.location}
+                    </span>
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={conditionStyles[item.condition]}>
                       {item.condition}

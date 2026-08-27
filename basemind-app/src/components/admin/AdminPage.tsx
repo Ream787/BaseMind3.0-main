@@ -19,6 +19,7 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import type { FeatureFlag, FeatureKey } from "@/types/database";
+import { MazeLeaderboard } from "@/components/admin/MazeLeaderboard";
 
 export function AdminPage() {
   const { flags, loading } = useFeatures();
@@ -163,6 +164,9 @@ export function AdminPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Renders nothing until somebody has actually finished the maze. */}
+      <MazeLeaderboard />
     </div>
   );
 }

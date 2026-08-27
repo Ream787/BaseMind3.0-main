@@ -7,6 +7,7 @@ import {
   describeFix,
   findExactProblems,
   verifyFindings,
+  verifyItemFindings,
   type Finding,
 } from "@/lib/equipmentCleanup";
 import type { Equipment } from "@/types/database";
@@ -79,7 +80,12 @@ export function EquipmentCleanupDialog({
 
     supabase.functions
       .invoke("equipment-cleanup", {
-        body: { locations: tally("location"), categories: tally("category") },
+        body: {
+          locations: tally("location"),
+          categories: tally("category"),
+          // Names go too, so "Rope" and "Ropes" can be spotted as one thing.
+          items: equipment.map((item) => item.name),
+        },
       })
       .then(async ({ data, error }) => {
         if (!active) return;
@@ -89,7 +95,11 @@ export function EquipmentCleanupDialog({
           throw new Error(body?.error ?? body?.detail ?? error.message);
         }
         // Checked against the real inventory before any of it is shown.
-        setSuggested(verifyFindings(data?.findings ?? [], equipment, exact));
+        const raw = data?.findings ?? [];
+        setSuggested([
+          ...verifyFindings(raw, equipment, exact),
+          ...verifyItemFindings(raw, equipment),
+        ]);
       })
       .catch((err: Error) => {
         if (active) setAskError(err.message);
@@ -107,7 +117,9 @@ export function EquipmentCleanupDialog({
   }, [open]);
 
   async function applyRename(finding: Finding) {
-    if (finding.kind === "duplicate") return;
+    // Narrowed to the two spelling kinds: the other two merge rows rather
+    // than rename a value, and their `variants` are rows, not strings.
+    if (finding.kind !== "location-variants" && finding.kind !== "category-variants") return;
     const isLocation = finding.kind === "location-variants";
     setApplying(keyOf(finding));
     try {
@@ -129,6 +141,27 @@ export function EquipmentCleanupDialog({
       toast.success(`Renamed to "${finding.canonical}"`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't apply that.");
+    } finally {
+      setApplying(null);
+      setConfirming(null);
+    }
+  }
+
+  /** Merge rows that are the same kit under different names. */
+  async function applyNameMerge(finding: Finding) {
+    if (finding.kind !== "item-variants") return;
+    setApplying(keyOf(finding));
+    try {
+      for (const variant of finding.variants) {
+        const { error } = await supabase.rpc("merge_equipment", {
+          keep_id: finding.canonicalId,
+          drop_id: variant.id,
+        });
+        if (error) throw new Error(error.message);
+      }
+      toast.success(`Merged into "${finding.canonical}"`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't merge those.");
     } finally {
       setApplying(null);
       setConfirming(null);
@@ -188,11 +221,13 @@ export function EquipmentCleanupDialog({
           {findings.map((finding) => {
             const key = keyOf(finding);
             const isDuplicate = finding.kind === "duplicate";
+            const isNameMerge = finding.kind === "item-variants";
+            const merges = isDuplicate || isNameMerge;
             const busy = applying === key;
             return (
               <div key={key} className="flex flex-col gap-2 rounded-lg border bg-card p-3">
                 <div className="flex items-start gap-2">
-                  {isDuplicate ? (
+                  {merges ? (
                     <Merge className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                   ) : (
                     <Type className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -201,9 +236,13 @@ export function EquipmentCleanupDialog({
                     <p className="text-sm font-medium">
                       {isDuplicate
                         ? `"${finding.name}" is listed ${finding.itemIds.length} times in ${finding.location}`
-                        : `"${finding.canonical}" is spelled ${
-                            finding.variants.length + 1
-                          } different ways`}
+                        : isNameMerge
+                          ? `"${finding.canonical}" is listed under ${
+                              finding.variants.length + 1
+                            } different names`
+                          : `"${finding.canonical}" is spelled ${
+                              finding.variants.length + 1
+                            } different ways`}
                     </p>
                     <p className="text-sm text-muted-foreground">{describeFix(finding)}</p>
                     {!isDuplicate && (
@@ -212,13 +251,13 @@ export function EquipmentCleanupDialog({
                   </div>
                 </div>
 
-                {isDuplicate && confirming === key && (
+                {merges && confirming === key && (
                   <p className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
                     <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                     <span>
-                      The quantities are added together and any loans or camp packing lists
-                      move to the row that stays. The other row is deleted, and that
-                      can&apos;t be undone.
+                      The quantities are added together, and the loans, camp packing
+                      lists and every room and box each row was in move to the row that
+                      stays. The other row is deleted, and that can&apos;t be undone.
                     </span>
                   </p>
                 )}
@@ -237,10 +276,16 @@ export function EquipmentCleanupDialog({
                         <Button
                           size="sm"
                           disabled={busy}
-                          onClick={() => (isDuplicate ? applyMerge(finding) : applyRename(finding))}
+                          onClick={() =>
+                            isDuplicate
+                              ? applyMerge(finding)
+                              : isNameMerge
+                                ? applyNameMerge(finding)
+                                : applyRename(finding)
+                          }
                         >
                           {busy && <Loader2 className="size-4 animate-spin" />}
-                          {isDuplicate ? "Yes, merge them" : "Yes, rename"}
+                          {merges ? "Yes, merge them" : "Yes, rename"}
                         </Button>
                       </>
                     ) : (
@@ -250,7 +295,7 @@ export function EquipmentCleanupDialog({
                         disabled={busy}
                         onClick={() => setConfirming(key)}
                       >
-                        {isDuplicate ? "Merge" : "Rename"}
+                        {merges ? "Merge" : "Rename"}
                       </Button>
                     )}
                 </div>
@@ -280,7 +325,9 @@ export function EquipmentCleanupDialog({
 
 /** Stable identity for a finding, so one card's busy state isn't another's. */
 function keyOf(finding: Finding): string {
-  return finding.kind === "duplicate"
-    ? `dup:${finding.itemIds.join(",")}`
-    : `${finding.kind}:${finding.canonical}:${finding.variants.join(",")}`;
+  if (finding.kind === "duplicate") return `dup:${finding.itemIds.join(",")}`;
+  if (finding.kind === "item-variants") {
+    return `item:${finding.canonicalId}:${finding.variants.map((v) => v.id).join(",")}`;
+  }
+  return `${finding.kind}:${finding.canonical}:${finding.variants.join(",")}`;
 }

@@ -7,9 +7,15 @@
 // same place as "Store Room"? Is "Contaner" the container? A person reads
 // those instantly and a regex does not.
 //
-// Only the distinct locations and categories are sent, with counts - not the
-// inventory. The question is about a few dozen short strings, so sending
-// several hundred equipment rows would cost quota to tell it nothing.
+// What gets sent is names only: the distinct rooms and categories with
+// counts, and the item names. Not quantities, conditions, notes or dates —
+// the question is "are these two strings the same thing", and everything
+// else would cost quota to tell it nothing.
+//
+// Item names are the riskiest part of the job, because acting on one merges
+// two rows and that cannot be undone. The prompt is correspondingly strict:
+// same object only, and anything with a number in it left alone, because
+// "2m Stave" and "2.3m Stave" are different kit that reads as a near-match.
 //
 // Nothing it returns is trusted: the browser checks every spelling against
 // the values that genuinely exist before showing a suggestion.
@@ -28,7 +34,11 @@ const corsHeaders = {
 
 type Tally = { value: string; count: number };
 
-function buildPrompt(locations: Tally[], categories: Tally[]): string {
+function buildPrompt(
+  locations: Tally[],
+  categories: Tally[],
+  items: string[],
+): string {
   const list = (rows: Tally[]) =>
     rows.map((r) => `- ${JSON.stringify(r.value)} (used by ${r.count} items)`).join("\n");
 
@@ -56,14 +66,28 @@ function buildPrompt(locations: Tally[], categories: Tally[]): string {
     "- If nothing is genuinely the same thing typed twice, return an empty",
     "  list. That is a good answer, not a failure.",
     "",
-    'Reply as JSON: {"findings": [{"kind": "location-variants" | "category-variants",',
-    '"canonical": string, "variants": string[], "why": string}]}',
+    "Then do the same for ITEM NAMES: find rows that are the same kit written",
+    "two ways — a plural (\"Rope\" and \"Ropes\"), a misspelling (\"malet\" for",
+    "\"mallet\"), or the same thing with an extra word.",
+    "",
+    "ITEM RULES, which are stricter because merging rows cannot be undone:",
+    "- Only group names that are the SAME OBJECT. Different sizes, lengths or",
+    '  types are different kit: "2m Stave" and "2.3m Stave" are NOT the same,',
+    '  nor are "Small Axe" and "Big Axe", nor "Dome Tent" and "Patrol Tent".',
+    "- A number anywhere in a name is a strong signal to leave it alone.",
+    "- If you are not sure, say nothing. A missed duplicate costs a tidy list;",
+    "  a wrong merge destroys a row somebody has to re-enter.",
+    "",
+    'Reply as JSON: {"findings": [{"kind": "location-variants" | "category-variants"',
+    '| "item-variants", "canonical": string, "variants": string[], "why": string}]}',
     '"why" is one short sentence a leader would find obvious, e.g.',
     '"Store Room is misspelled here."',
     "",
     `ROOMS:\n${list(locations) || "- (none)"}`,
     "",
     `CATEGORIES:\n${list(categories) || "- (none)"}`,
+    "",
+    `ITEM NAMES:\n${items.map((n) => `- ${JSON.stringify(n)}`).join("\n") || "- (none)"}`,
   ].join("\n");
 }
 
@@ -84,16 +108,20 @@ Deno.serve(async (req: Request) => {
       return json({ error: "Not signed in." }, 401);
     }
 
-    const { locations, categories } = (await req.json()) as {
+    const { locations, categories, items } = (await req.json()) as {
       locations?: Tally[];
       categories?: Tally[];
+      items?: string[];
     };
 
     const rooms = Array.isArray(locations) ? locations.slice(0, 200) : [];
     const cats = Array.isArray(categories) ? categories.slice(0, 200) : [];
+    const names = Array.isArray(items)
+      ? items.filter((n): n is string => typeof n === "string").slice(0, 500)
+      : [];
 
     // Nothing to compare against itself.
-    if (rooms.length + cats.length < 2) return json({ findings: [] });
+    if (rooms.length + cats.length + names.length < 2) return json({ findings: [] });
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,
@@ -101,11 +129,11 @@ Deno.serve(async (req: Request) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: buildPrompt(rooms, cats) }] }],
+          contents: [{ parts: [{ text: buildPrompt(rooms, cats, names) }] }],
           generationConfig: {
             // This is a matching job, not a writing one.
             temperature: 0,
-            maxOutputTokens: 2048,
+            maxOutputTokens: 4096,
             responseMimeType: "application/json",
           },
         }),

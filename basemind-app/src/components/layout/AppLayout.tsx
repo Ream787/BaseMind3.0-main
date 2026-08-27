@@ -17,6 +17,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useFeatures } from "@/context/FeaturesContext";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/ui/logo";
+import { useSecretKnock } from "@/lib/secretKnock";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { OfflineBanner } from "@/components/layout/OfflineBanner";
 import {
@@ -56,6 +57,7 @@ const primaryNav: { label: string; icon: typeof Package; tabs: SectionTab[] }[] 
 
 export function AppLayout() {
   const { session, profile, loading, logout } = useAuth();
+  const knock = useSecretKnock();
   const { theme, toggleTheme } = useTheme();
   const { isEnabled } = useFeatures();
   const location = useLocation();
@@ -95,7 +97,17 @@ export function AppLayout() {
           32px controls, and the extra padding only pushed the page down. */}
       <header className="flex items-center justify-between gap-2 border-b px-4 py-1.5 sm:py-3">
         <div className="flex min-w-0 items-center gap-6">
-          <Logo className="size-8" />
+          {/* Ten taps opens the maze. A button rather than a div so it is
+              keyboard-reachable, but with no label and no hover state: it
+              should read as the logo until somebody is curious enough. */}
+          <button
+            type="button"
+            onClick={knock}
+            aria-label="BaseMind"
+            className="rounded-md focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            <Logo className="size-8" />
+          </button>
           {/* On phones this row is hidden and the bottom bar takes over —
               easier to reach one-handed. */}
           <nav className="hidden items-center gap-1 md:flex">

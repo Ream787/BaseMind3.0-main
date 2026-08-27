@@ -9,7 +9,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useEquipment } from "@/context/EquipmentContext";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
 import { canonical } from "@/lib/boxes";
-import type { Equipment } from "@/types/database";
+import { boxContents, unplacedQuantity, byEquipment } from "@/lib/placements";
+import type { Equipment, EquipmentPlacement } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,12 +31,14 @@ const MONTHS_UNTIL_NEXT_CHECK = 6;
 export function BoxDetailPage() {
   const { code = "" } = useParams();
   const { profile, hasRole } = useAuth();
-  const { equipment, updateEquipment, addEquipment } = useEquipment();
+  const { equipment, updateEquipment } = useEquipment();
   const { rows: boxes, loading } = useRealtimeTable("equipment_boxes", { orderBy: "name" });
+  const { rows: placements } = useRealtimeTable("equipment_placements");
 
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showQr, setShowQr] = useState(false);
   const [newItem, setNewItem] = useState("");
+  const [newQuantity, setNewQuantity] = useState("1");
   const [adding, setAdding] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [draftLocation, setDraftLocation] = useState("");
@@ -47,13 +50,35 @@ export function BoxDetailPage() {
     [boxes, code],
   );
 
-  const contents = useMemo(
-    () =>
-      equipment
-        .filter((item) => item.box_id === box?.id)
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [equipment, box?.id],
+  const equipmentById = useMemo(
+    () => new Map(equipment.map((e) => [e.id, e])),
+    [equipment],
   );
+  const placementsByItem = useMemo(() => byEquipment(placements), [placements]);
+
+  /** What is in this box, and how many of each. */
+  const contents = useMemo(
+    () => (box ? boxContents(box.id, placements, equipmentById) : []),
+    [box, placements, equipmentById],
+  );
+
+  /**
+   * What could be added: anything not already in this box, with how many are
+   * still unaccounted for. Adding kit you already own should reuse that row —
+   * a second "Rope" is exactly the duplicate the tidy-up pass has to clean up.
+   */
+  const addable = useMemo(() => {
+    const here = new Set(contents.map((c) => c.item.id));
+    const term = newItem.trim().toLowerCase();
+    if (term.length < 1) return [];
+    return equipment
+      .filter((item) => !here.has(item.id) && item.name.toLowerCase().includes(term))
+      .slice(0, 6)
+      .map((item) => ({
+        item,
+        spare: unplacedQuantity(item, placementsByItem.get(item.id) ?? []),
+      }));
+  }, [equipment, contents, newItem, placementsByItem]);
 
   // Keep the editable header in step with the box, without clobbering what
   // someone is halfway through typing.
@@ -139,28 +164,66 @@ export function BoxDetailPage() {
     }
   }
 
-  async function addToBox() {
+  /** Put some of an item that already exists into this box. */
+  async function addExisting(item: Equipment, quantity: number) {
+    if (!box) return;
+    setAdding(true);
+    try {
+      const { error } = await supabase.rpc("place_equipment", {
+        p_equipment_id: item.id,
+        p_box_id: box.id,
+        p_location: null,
+        p_quantity: quantity,
+      });
+      if (error) throw new Error(error.message);
+      setNewItem("");
+      setNewQuantity("1");
+      toast.success(`${quantity} × ${item.name} in ${box.name}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't add that.");
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  /** Nothing of that name exists yet, so create the item and place it here. */
+  async function addNew() {
     if (!box) return;
     const name = newItem.trim();
+    const quantity = Math.max(1, Number(newQuantity) || 1);
     if (!name) return;
     setAdding(true);
     try {
-      await addEquipment({
-        name,
-        category: null,
-        quantity: 1,
-        // The box's room, so the "By room" view stays truthful without
-        // anyone having to set it twice.
-        location: box.location,
-        condition: "Good",
-        notes: null,
-        date_last_checked: null,
-        next_check_date: null,
-        checked_by: null,
-        label_colour: null,
-        box_id: box.id,
+      const { data, error } = await supabase
+        .from("equipment")
+        .insert({
+          name,
+          category: null,
+          quantity,
+          // The box's room, so the room views agree without anyone
+          // having to set it in two places.
+          location: box.location,
+          condition: "Good",
+          notes: null,
+          date_last_checked: null,
+          next_check_date: null,
+          checked_by: null,
+        })
+        .select()
+        .single();
+      if (error) throw new Error(error.message);
+
+      const { error: placeError } = await supabase.rpc("place_equipment", {
+        p_equipment_id: data.id,
+        p_box_id: box.id,
+        p_location: null,
+        p_quantity: quantity,
       });
+      if (placeError) throw new Error(placeError.message);
+
       setNewItem("");
+      setNewQuantity("1");
+      toast.success(`${name} added to ${box.name}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't add that item.");
     } finally {
@@ -168,9 +231,27 @@ export function BoxDetailPage() {
     }
   }
 
+  /** Change how many of something are in here; 0 takes it out of the box. */
+  async function setPlacedQuantity(placement: EquipmentPlacement, quantity: number) {
+    if (!box) return;
+    setBusyId(placement.equipment_id);
+    try {
+      const { error } = await supabase.rpc("place_equipment", {
+        p_equipment_id: placement.equipment_id,
+        p_box_id: box.id,
+        p_location: null,
+        p_quantity: quantity,
+      });
+      if (error) throw new Error(error.message);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't change that.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const checkedToday = contents.filter(
-    (item) =>
-      item.date_last_checked === format(new Date(), "yyyy-MM-dd"),
+    ({ item }) => item.date_last_checked === format(new Date(), "yyyy-MM-dd"),
   ).length;
 
   return (
@@ -255,12 +336,12 @@ export function BoxDetailPage() {
         </div>
       ) : (
         <ul className="flex flex-col gap-2">
-          {contents.map((item) => {
+          {contents.map(({ item, placement }) => {
             const busy = busyId === item.id;
             const missing = item.condition === "Missing";
             return (
               <li
-                key={item.id}
+                key={placement.id}
                 className={`flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 ${
                   missing ? "border-destructive/40 bg-destructive/5" : "bg-card"
                 }`}
@@ -268,11 +349,10 @@ export function BoxDetailPage() {
                 <div className="flex min-w-0 flex-col">
                   <span className="font-medium">
                     {item.name}
-                    {item.quantity !== 1 && (
-                      <span className="ml-1 text-sm font-normal text-muted-foreground">
-                        ×{item.quantity}
-                      </span>
-                    )}
+                    <span className="ml-1 text-sm font-normal text-muted-foreground">
+                      ×{placement.quantity}
+                      {placement.quantity !== item.quantity && ` of ${item.quantity}`}
+                    </span>
                   </span>
                   <span className="text-xs text-muted-foreground">
                     {missing && "Marked missing · "}
@@ -282,7 +362,21 @@ export function BoxDetailPage() {
                   </span>
                 </div>
                 {canEdit && (
-                  <div className="flex shrink-0 gap-2 sm:gap-1">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-1">
+                    {/* How many are in THIS box, not how many exist. */}
+                    <Input
+                      type="number"
+                      min={0}
+                      inputMode="numeric"
+                      aria-label={`How many ${item.name} are in this box`}
+                      className="h-8 w-16"
+                      defaultValue={placement.quantity}
+                      disabled={busy}
+                      onBlur={(e) => {
+                        const next = Math.max(0, Number(e.target.value) || 0);
+                        if (next !== placement.quantity) void setPlacedQuantity(placement, next);
+                      }}
+                    />
                     <Button
                       variant="outline"
                       size="sm"
@@ -312,24 +406,64 @@ export function BoxDetailPage() {
       )}
 
       {canEdit && (
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void addToBox();
-          }}
-        >
-          <Input
-            placeholder="Add something you found in this box…"
-            value={newItem}
-            onChange={(e) => setNewItem(e.target.value)}
-            disabled={adding}
-          />
-          <Button type="submit" disabled={adding || !newItem.trim()}>
-            <Plus className="size-4" />
-            Add
-          </Button>
-        </form>
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <Input
+              placeholder="Add something in this box…"
+              value={newItem}
+              onChange={(e) => setNewItem(e.target.value)}
+              disabled={adding}
+            />
+            <Input
+              type="number"
+              min={1}
+              inputMode="numeric"
+              aria-label="How many"
+              className="w-20"
+              value={newQuantity}
+              onChange={(e) => setNewQuantity(e.target.value)}
+              disabled={adding}
+            />
+          </div>
+
+          {/* Existing kit first, so adding rope you already own reuses that
+              row instead of creating a second "Rope" for the tidy-up pass to
+              find later. Creating a new item is the fallback, not the default. */}
+          {addable.length > 0 && (
+            <ul className="flex flex-col gap-1">
+              {addable.map(({ item, spare }) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    disabled={adding}
+                    onClick={() =>
+                      addExisting(item, Math.max(1, Number(newQuantity) || 1))
+                    }
+                    className="flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+                  >
+                    <span className="min-w-0 truncate">{item.name}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {spare > 0 ? `${spare} not placed` : `${item.quantity} owned`}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {newItem.trim() && (
+            <Button
+              variant={addable.length > 0 ? "outline" : "default"}
+              disabled={adding}
+              onClick={addNew}
+            >
+              <Plus className="size-4" />
+              {addable.length > 0
+                ? `Not one of those — add "${newItem.trim()}" as new`
+                : `Add "${newItem.trim()}"`}
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );

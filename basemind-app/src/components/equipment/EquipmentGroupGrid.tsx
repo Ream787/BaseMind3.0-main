@@ -1,7 +1,7 @@
 import { Box, ChevronRight, DoorOpen, Tags } from "lucide-react";
 
 import type { Equipment } from "@/types/database";
-import { groupEquipment, type GroupBy } from "@/lib/groupEquipment";
+import { groupEquipment, type EquipmentGroup, type GroupBy } from "@/lib/groupEquipment";
 import { Badge } from "@/components/ui/badge";
 
 interface EquipmentGroupGridProps {
@@ -12,6 +12,13 @@ interface EquipmentGroupGridProps {
   boxCounts?: Map<string, number>;
   /** Rooms to list even with nothing loose in them yet. */
   alwaysShow?: { key: string; name: string }[];
+  /**
+   * Pre-built buckets, used instead of grouping by a column.
+   *
+   * The room view is built from placements now: one item can be in two rooms
+   * at once, which is precisely what grouping by a single column cannot say.
+   */
+  groups?: EquipmentGroup[];
 }
 
 export function EquipmentGroupGrid({
@@ -20,8 +27,9 @@ export function EquipmentGroupGrid({
   onSelect,
   boxCounts,
   alwaysShow,
+  groups: providedGroups,
 }: EquipmentGroupGridProps) {
-  const groups = groupEquipment(items, groupBy, alwaysShow);
+  const groups = providedGroups ?? groupEquipment(items, groupBy, alwaysShow);
   const Icon = groupBy === "location" ? DoorOpen : Tags;
 
   if (groups.length === 0) {
