@@ -6,6 +6,7 @@ import {
   Package,
   Settings,
   ShoppingBasket,
+  Sparkles,
   Sun,
   UserCog,
   Users,
@@ -19,6 +20,7 @@ import { Logo } from "@/components/ui/logo";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { OfflineBanner } from "@/components/layout/OfflineBanner";
 import {
+  ASSISTANT_TABS,
   CAMP_TABS,
   EQUIPMENT_TABS,
   FOOD_TABS,
@@ -49,6 +51,7 @@ const primaryNav: { label: string; icon: typeof Package; tabs: SectionTab[] }[] 
   { label: "Equipment", icon: Package, tabs: EQUIPMENT_TABS },
   { label: "Camps", icon: CalendarDays, tabs: CAMP_TABS },
   { label: "Food", icon: ShoppingBasket, tabs: FOOD_TABS },
+  { label: "Assistant", icon: Sparkles, tabs: ASSISTANT_TABS },
 ];
 
 export function AppLayout() {
@@ -176,8 +179,11 @@ export function AppLayout() {
       </header>
       <OfflineBanner />
 
-      {/* pb-20 on mobile keeps content clear of the fixed bottom bar. */}
-      <main className="flex-1 p-4 pb-20 sm:p-6 md:pb-6">
+      {/* pb-20 on mobile keeps content clear of the fixed bottom bar.
+          A flex column so a page can fill the height rather than the window
+          scrolling — the assistant needs its question box pinned to the
+          bottom, which it can't be if the page is as tall as the transcript. */}
+      <main className="flex flex-1 flex-col p-4 pb-20 sm:p-6 md:pb-6">
         <Outlet />
       </main>
 

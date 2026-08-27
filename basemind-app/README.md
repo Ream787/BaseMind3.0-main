@@ -47,21 +47,43 @@ To enable it: Supabase dashboard → Edge Functions → create a function named 
 
 Whatever produces it, read the plan before you rely on it.
 
-## Policies and the assistant
+## The assistant
 
-Upload the group's policy documents as PDFs; the text is extracted on upload and stored
-alongside the original, so the documents stay searchable — and readable — with no API key.
+**Assistant** is its own section in the nav, with two tabs: **Ask** and **Documents**.
 
-The **assistant** on that page answers questions from that extracted text and nothing else.
-Every answer carries verbatim quotes, and each quote is checked against the stored document
-before it is shown: a reply quoting something that isn't in your policies is discarded rather
-than displayed. Only Admins and Managers can add or change documents, because an answer is
-only as trustworthy as who can edit what it answers from.
+Add the group's policy documents as PDFs — upload a file, or paste a link straight to one and
+it is downloaded for you. The text is extracted when it arrives and stored alongside the
+original, so the documents stay searchable — and readable — with no API key.
+
+Adding a document whose name you already have **replaces** it rather than adding a second
+copy: two copies means the assistant quotes whichever it read first, and an edit to one
+silently doesn't apply. A document added by link keeps that link, so the ↻ button next to it
+re-downloads and replaces it in place when the source is updated.
+
+The **Ask** tab answers questions from that extracted text and nothing else. Every answer
+carries verbatim quotes, and each quote is checked against the stored document before it is
+shown: a reply quoting something that isn't in your policies is discarded rather than
+displayed. Only Admins and Managers can add or change documents, because an answer is only as
+trustworthy as who can edit what it answers from.
+
+Conversations are **saved and private to whoever asked** — row-level security enforces that,
+not just the UI. Nothing is written until an answer actually arrives, so a failed question
+leaves no half-conversation behind. Only the last **three exchanges** are replayed to the
+model: enough for "and what about cubs?" to make sense, without pushing the documents down a
+prompt that grows every turn.
 
 To enable it: Supabase dashboard → Edge Functions → create a function named `policy-chat`,
 paste [`supabase/functions/policy-chat/index.ts`](./supabase/functions/policy-chat/index.ts),
 and set the same `GEMINI_API_KEY` secret. Without it the documents still upload, search and
 open — only the question box errors.
+
+For **adding a policy by link**, create a second function named `fetch-policy-pdf` and paste
+[`supabase/functions/fetch-policy-pdf/index.ts`](./supabase/functions/fetch-policy-pdf/index.ts).
+It needs no secrets. Downloading happens there rather than in the browser because almost
+nothing serves a PDF with headers that allow a cross-origin read. It refuses anything that
+isn't really a PDF, caps downloads at 15 MB, checks every redirect hop, and blocks private and
+cloud-metadata addresses — it is fetching a URL somebody typed, from inside your
+infrastructure. Uploading files works without it.
 
 ### Choosing the Gemini model
 

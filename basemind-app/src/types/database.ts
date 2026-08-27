@@ -120,12 +120,44 @@ export type Policy = {
   /** Extracted text; empty means nothing readable was found. */
   content: string;
   page_count: number | null;
+  /** Where it was downloaded from, so it can be re-fetched later. */
+  source_url: string | null;
+  source_fetched_at: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
 };
 
 export type NewPolicy = Omit<Policy, "id" | "created_at" | "updated_at">;
+
+export type PolicyChat = {
+  id: string;
+  user_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NewPolicyChat = Omit<PolicyChat, "id" | "created_at" | "updated_at" | "title"> &
+  Partial<Pick<PolicyChat, "title">>;
+
+/** Renaming, and bumping a chat to the top of the list after a new answer. */
+export type PolicyChatUpdate = Partial<Pick<PolicyChat, "title" | "updated_at">>;
+
+export type PolicyChatMessage = {
+  id: string;
+  chat_id: string;
+  role: "user" | "assistant";
+  content: string;
+  /**
+   * The checked answer for an assistant message - citations already matched
+   * against the documents they quote. Null on a user's own message.
+   */
+  result: unknown;
+  created_at: string;
+};
+
+export type NewPolicyChatMessage = Omit<PolicyChatMessage, "id" | "created_at">;
 
 export type FeatureKey =
   | "equipment"
@@ -278,6 +310,8 @@ export type Database = {
       camp_forms: TableDef<CampForm, NewCampForm>;
       feature_flags: TableDef<FeatureFlag, FeatureFlag, Partial<FeatureFlag>>;
       policies: TableDef<Policy, NewPolicy>;
+      policy_chats: TableDef<PolicyChat, NewPolicyChat, PolicyChatUpdate>;
+      policy_chat_messages: TableDef<PolicyChatMessage, NewPolicyChatMessage>;
     };
     Views: { [_ in never]: never };
     Functions: {

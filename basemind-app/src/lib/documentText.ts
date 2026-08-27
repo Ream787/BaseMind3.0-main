@@ -39,13 +39,27 @@ export async function extractDocumentText(file: File): Promise<ExtractedDocument
 }
 
 async function extractPdfText(file: File): Promise<ExtractedDocument> {
-  // pdf.js is ~350 kB and only needed when someone uploads, so it's loaded on
-  // demand rather than shipped in the main bundle.
+  return extractPdfTextFromBytes(await file.arrayBuffer());
+}
+
+/**
+ * The same extraction, for a PDF that arrived as bytes rather than as a file
+ * the user picked - a document downloaded from a link, for instance.
+ *
+ * Sharing this with the upload path is deliberate: "readable" has to mean
+ * exactly one thing, or a document could be accepted by one route and be
+ * useless to the assistant anyway.
+ */
+export async function extractPdfTextFromBytes(
+  data: ArrayBuffer,
+): Promise<ExtractedDocument> {
+  // pdf.js is ~350 kB and only needed when someone adds a document, so it's
+  // loaded on demand rather than shipped in the main bundle.
   const pdfjs = await import("pdfjs-dist");
   const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
-  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  const doc = await pdfjs.getDocument({ data }).promise;
   const pages: string[] = [];
 
   for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
