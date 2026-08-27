@@ -28,3 +28,12 @@ hidden buttons, and has grown from there one working feature at a time.
 
 The original app was removed once the rebuild replaced it; it remains in this repository's git
 history if it's ever needed.
+
+## Documentation
+
+Full documentation — every screen, the architecture, the security model, setup and
+deployment — is in **[DOCUMENTATION.md](./DOCUMENTATION.md)**, with screenshots in
+[`docs/screenshots/`](./docs/screenshots/).
+
+The same manual is also available as a [single self-contained HTML page](./docs/basemind-field-manual.html)
+and as a [50-page PDF](./docs/BaseMind-Field-Manual.pdf).
