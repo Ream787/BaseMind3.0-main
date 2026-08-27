@@ -110,11 +110,46 @@ select v.name, v.category, 'Unassigned', v.quantity, 'Good', v.label_colour, v.n
       ('Pick Axe', 'Tools', 0, null,
        'Quantity not recorded on the sheet — needs counting.')
   ) as v(name, category, quantity, label_colour, notes)
+ -- Skip anything already in the inventory under that name.
+ --
+ -- Matching on name ALONE is deliberate, and it is the cautious choice
+ -- rather than the precise one. The same name in two different rooms is
+ -- perfectly legitimate — a first aid kit in the store and another in the
+ -- minibus are two real things — so name is not a key here. But this seed
+ -- puts everything in 'Unassigned', and matching on (name, location) would
+ -- mean that once you have filed "Tent" in the Loft, a second run inserts a
+ -- fresh "Tent" in 'Unassigned' and you have two.
+ --
+ -- Skipping can therefore be wrong in the other direction: if you already
+ -- had an unrelated "Tent", this seed's tent is left out. That is why the
+ -- query below lists what was skipped, so a false match is visible rather
+ -- than silent.
  where not exists (
    select 1 from public.equipment e where lower(e.name) = lower(v.name)
  );
 
 commit;
+
+-- ---------------------------------------------------------------------
+-- Anything skipped because that name was already in use.
+--
+-- Normally empty. A row here means either you have already run this file,
+-- or you had an item of that name already — check the location and
+-- quantity, because the sheet's version was NOT added.
+-- ---------------------------------------------------------------------
+select e.name, e.location, e.quantity, e.category
+  from public.equipment e
+ where lower(e.name) in (
+   '2m stave', '2.1m pioneering pole', '2.3m stave', '1m stave', 'barrel', 'tent',
+   'tentco gazebo', 'tentco gazebo side (windows)', 'tentco gazebo side (doors)',
+   'blue gazebo', '2m rope (8mm outdoor braid)', '4m rope (8mm outdoor braid)',
+   '5m rope (8mm outdoor braid)', '6m rope (8mm outdoor braid)',
+   'outdoor braid rope, 8mm (uncut)', 'outdoor braid rope, 10mm (uncut)',
+   'foldable shovel', 'frapping mallet (half circle)', 'frapping mallet (full circle)',
+   'small axe', 'big axe', 'spade', 'pick axe'
+ )
+   and e.location <> 'Unassigned'
+ order by e.name;
 
 -- ---------------------------------------------------------------------
 -- What you should see afterwards: 23 rows, 8 of them carrying a length band.

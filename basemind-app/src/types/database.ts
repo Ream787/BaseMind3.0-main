@@ -319,6 +319,10 @@ export type Database = {
         Args: { preset_id: string; target_event_id: string; target_headcount?: number | null };
         Returns: string;
       };
+      merge_equipment: {
+        Args: { keep_id: string; drop_id: string };
+        Returns: void;
+      };
       save_menu_as_preset: {
         Args: { source_menu_id: string; preset_name: string; preset_category?: string | null };
         Returns: string;

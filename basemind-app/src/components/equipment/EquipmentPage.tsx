@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Plus, Search } from "lucide-react";
+import { ArrowLeft, Plus, Search, Sparkles } from "lucide-react";
+import { addMonths, format } from "date-fns";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
@@ -28,6 +29,7 @@ import {
 import { EquipmentTable } from "@/components/equipment/EquipmentTable";
 import { EquipmentFormDialog } from "@/components/equipment/EquipmentFormDialog";
 import { EquipmentGroupGrid } from "@/components/equipment/EquipmentGroupGrid";
+import { EquipmentCleanupDialog } from "@/components/equipment/EquipmentCleanupDialog";
 import { LoanFormDialog } from "@/components/loans/LoanFormDialog";
 import { SectionTabs, EQUIPMENT_TABS } from "@/components/layout/SectionTabs";
 import { groupKeyFor, type GroupBy } from "@/lib/groupEquipment";
@@ -55,8 +57,10 @@ interface UserOption {
 }
 
 export function EquipmentPage() {
-  const { hasRole } = useAuth();
-  const { equipment, loading, error } = useEquipment();
+  const { hasRole, profile } = useAuth();
+  const { equipment, loading, error, updateEquipment } = useEquipment();
+  const [checkingId, setCheckingId] = useState<string | null>(null);
+  const [cleanupOpen, setCleanupOpen] = useState(false);
 
   const [users, setUsers] = useState<UserOption[]>([]);
   const [search, setSearch] = useState("");
@@ -73,6 +77,10 @@ export function EquipmentPage() {
 
   const canEdit = hasRole(["Admin", "Manager", "Member"]);
   const canDelete = hasRole(["Admin", "Manager"]);
+  // Tidying merges rows and renames rooms across the whole inventory, so it
+  // sits with deleting rather than with editing: a Member can correct the
+  // item in front of them, not restructure everyone else's list.
+  const canTidy = hasRole(["Admin", "Manager"]);
 
   useEffect(() => {
     supabase
@@ -144,6 +152,31 @@ export function EquipmentPage() {
     setDeleteTarget(null);
   }
 
+  /**
+   * Records that this item was looked at today, by whoever is signed in, and
+   * schedules the next look for six months' time.
+   *
+   * A button rather than the edit form on purpose: checking kit happens with
+   * the kit in your hands, and typing three fields on a phone in a store room
+   * is how a check ends up not being recorded at all.
+   */
+  async function markChecked(item: Equipment) {
+    setCheckingId(item.id);
+    const today = new Date();
+    try {
+      await updateEquipment(item.id, {
+        date_last_checked: format(today, "yyyy-MM-dd"),
+        next_check_date: format(addMonths(today, 6), "yyyy-MM-dd"),
+        checked_by: profile?.id ?? null,
+      });
+      toast.success(`${item.name} checked — next check ${format(addMonths(today, 6), "d MMM yyyy")}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't record that check.");
+    } finally {
+      setCheckingId(null);
+    }
+  }
+
   const showingGroupGrid = view !== "all" && openGroup === null;
 
   return (
@@ -175,12 +208,20 @@ export function EquipmentPage() {
             </>
           )}
         </div>
-        {canEdit && (
-          <Button onClick={openAddDialog}>
-            <Plus className="size-4" />
-            Add equipment
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {canTidy && (
+            <Button variant="outline" onClick={() => setCleanupOpen(true)}>
+              <Sparkles className="size-4" />
+              Tidy up
+            </Button>
+          )}
+          {canEdit && (
+            <Button onClick={openAddDialog}>
+              <Plus className="size-4" />
+              Add equipment
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -244,8 +285,16 @@ export function EquipmentPage() {
           onEdit={openEditDialog}
           onDelete={setDeleteTarget}
           onLend={openLendDialog}
+          onCheck={markChecked}
+          checkingId={checkingId}
         />
       )}
+
+      <EquipmentCleanupDialog
+        open={cleanupOpen}
+        onOpenChange={setCleanupOpen}
+        equipment={equipment}
+      />
 
       <EquipmentFormDialog
         open={dialogOpen}

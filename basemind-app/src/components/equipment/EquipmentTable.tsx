@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { HandCoins, Pencil, Trash2 } from "lucide-react";
+import { ClipboardCheck, HandCoins, Pencil, Trash2 } from "lucide-react";
 
 import type { Equipment, EquipmentCondition, EquipmentLoan } from "@/types/database";
 import { availableQuantity, onLoanQuantity } from "@/lib/loans";
@@ -32,6 +32,9 @@ interface EquipmentTableProps {
   onEdit: (equipment: Equipment) => void;
   onDelete: (equipment: Equipment) => void;
   onLend: (equipment: Equipment) => void;
+  onCheck: (equipment: Equipment) => void;
+  /** Id currently being stamped, so its button can show it is working. */
+  checkingId: string | null;
 }
 
 /**
@@ -58,6 +61,8 @@ export function EquipmentTable({
   onEdit,
   onDelete,
   onLend,
+  onCheck,
+  checkingId,
 }: EquipmentTableProps) {
   if (items.length === 0) {
     return (
@@ -125,6 +130,18 @@ export function EquipmentTable({
                     >
                       <HandCoins className="size-4" />
                       Lend
+                    </Button>
+                  )}
+                  {canEdit && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={checkingId === item.id}
+                      onClick={() => onCheck(item)}
+                      title="Record that you checked this today"
+                    >
+                      <ClipboardCheck className="size-4" />
+                      Check
                     </Button>
                   )}
                   {canEdit && (
@@ -210,6 +227,18 @@ export function EquipmentTable({
                             }
                           >
                             <HandCoins className="size-4" />
+                          </Button>
+                        )}
+                        {canEdit && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled={checkingId === item.id}
+                            onClick={() => onCheck(item)}
+                            aria-label={`Mark ${item.name} as checked today`}
+                            title="Record that you checked this today"
+                          >
+                            <ClipboardCheck className="size-4" />
                           </Button>
                         )}
                         {canEdit && (
