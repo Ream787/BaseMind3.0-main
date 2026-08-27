@@ -54,7 +54,6 @@ export function SectionTabs({ tabs }: { tabs: SectionTab[] }) {
 /** The three sections, so the tab lists stay in one place. */
 export const EQUIPMENT_TABS: SectionTab[] = [
   { to: "/equipment", label: "Inventory", feature: "equipment" },
-  { to: "/boxes", label: "Boxes", feature: "equipment" },
   { to: "/loans", label: "Borrowed", feature: "loans" },
 ];
 

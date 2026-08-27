@@ -18,9 +18,6 @@ import { EquipmentProvider } from "@/context/EquipmentContext";
 const EquipmentPage = lazy(() =>
   import("@/components/equipment/EquipmentPage").then((m) => ({ default: m.EquipmentPage })),
 );
-const BoxesPage = lazy(() =>
-  import("@/components/boxes/BoxesPage").then((m) => ({ default: m.BoxesPage })),
-);
 const BoxDetailPage = lazy(() =>
   import("@/components/boxes/BoxDetailPage").then((m) => ({ default: m.BoxDetailPage })),
 );
@@ -110,16 +107,10 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: "boxes",
-        element: (
-          <Gate feature="equipment">
-            <EquipmentProvider>
-              <BoxesPage />
-            </EquipmentProvider>
-          </Gate>
-        ),
-      },
-      {
+        // Boxes live inside the equipment page, under their room. This route
+        // exists because it is what a QR sticker encodes: scanning one has to
+        // land on the box itself, from the camera, without going via a list.
+
         path: "boxes/:code",
         element: (
           <Gate feature="equipment">

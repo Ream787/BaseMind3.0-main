@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Plus, Search, Sparkles } from "lucide-react";
+import { ArrowLeft, Box, ChevronRight, Plus, QrCode, Search, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router";
 import { addMonths, format } from "date-fns";
 import { toast } from "sonner";
 
@@ -30,9 +31,11 @@ import { EquipmentTable } from "@/components/equipment/EquipmentTable";
 import { EquipmentFormDialog } from "@/components/equipment/EquipmentFormDialog";
 import { EquipmentGroupGrid } from "@/components/equipment/EquipmentGroupGrid";
 import { EquipmentCleanupDialog } from "@/components/equipment/EquipmentCleanupDialog";
+import { QrScannerDialog } from "@/components/boxes/QrScannerDialog";
+import { generateBoxCode } from "@/lib/boxes";
 import { LoanFormDialog } from "@/components/loans/LoanFormDialog";
 import { SectionTabs, EQUIPMENT_TABS } from "@/components/layout/SectionTabs";
-import { groupKeyFor, type GroupBy } from "@/lib/groupEquipment";
+import { groupKeyFor, UNGROUPED_LABEL, type GroupBy } from "@/lib/groupEquipment";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
 
 const CONDITION_FILTERS: (EquipmentCondition | "All")[] = [
@@ -57,10 +60,12 @@ interface UserOption {
 }
 
 export function EquipmentPage() {
+  const navigate = useNavigate();
   const { hasRole, profile } = useAuth();
   const { equipment, loading, error, updateEquipment } = useEquipment();
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [cleanupOpen, setCleanupOpen] = useState(false);
+  const [scanning, setScanning] = useState(false);
 
   const [users, setUsers] = useState<UserOption[]>([]);
   const [search, setSearch] = useState("");
@@ -74,6 +79,7 @@ export function EquipmentPage() {
   const [lendItemId, setLendItemId] = useState<string | undefined>();
 
   const { rows: loans } = useRealtimeTable("equipment_loans");
+  const { rows: boxes } = useRealtimeTable("equipment_boxes", { orderBy: "name" });
 
   const canEdit = hasRole(["Admin", "Manager", "Member"]);
   const canDelete = hasRole(["Admin", "Manager"]);
@@ -120,6 +126,59 @@ export function EquipmentPage() {
     if (view === "all" || openGroup === null) return filtered;
     return filtered.filter((item) => groupKeyFor(item, view) === openGroup.key);
   }, [filtered, view, openGroup]);
+
+  /** Boxes per room, keyed the way the room grid keys its groups. */
+  const boxesByRoom = useMemo(() => {
+    const map = new Map<string, typeof boxes>();
+    for (const box of boxes) {
+      const key = (box.location.trim() || UNGROUPED_LABEL.location).toLowerCase();
+      const bucket = map.get(key);
+      if (bucket) bucket.push(box);
+      else map.set(key, [box]);
+    }
+    return map;
+  }, [boxes]);
+
+  const boxCounts = useMemo(
+    () => new Map([...boxesByRoom].map(([key, list]) => [key, list.length])),
+    [boxesByRoom],
+  );
+
+  /** Rooms that hold a box but nothing loose still belong in the grid. */
+  const roomsWithBoxes = useMemo(
+    () =>
+      boxes.map((box) => {
+        const name = box.location.trim() || UNGROUPED_LABEL.location;
+        return { key: name.toLowerCase(), name };
+      }),
+    [boxes],
+  );
+
+  const openRoomBoxes = useMemo(
+    () => (view === "location" && openGroup ? (boxesByRoom.get(openGroup.key) ?? []) : []),
+    [view, openGroup, boxesByRoom],
+  );
+
+  const itemCountByBox = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of equipment) {
+      if (item.box_id) counts.set(item.box_id, (counts.get(item.box_id) ?? 0) + 1);
+    }
+    return counts;
+  }, [equipment]);
+
+  /**
+   * Inside a room, kit that is in a box is shown in its box rather than
+   * again in the loose list — that is what makes a box a section of the room
+   * rather than a second copy of it. Every other view still shows everything.
+   */
+  const looseItems = useMemo(
+    () =>
+      view === "location" && openGroup
+        ? visibleItems.filter((item) => !item.box_id)
+        : visibleItems,
+    [visibleItems, view, openGroup],
+  );
 
   function changeView(next: View) {
     setView(next);
@@ -177,6 +236,57 @@ export function EquipmentPage() {
     }
   }
 
+  /**
+   * A scanned sticker always lands somewhere useful. An unknown one creates
+   * its box: the person is holding a real sticker on a real box, and telling
+   * them "not found" would mean walking away to add it and coming back.
+   */
+  async function openScanned(code: string) {
+    setScanning(false);
+    const existing = boxes.find((b) => b.code.toUpperCase() === code.toUpperCase());
+    if (existing) {
+      navigate(`/boxes/${encodeURIComponent(existing.code)}`);
+      return;
+    }
+    if (!canEdit) {
+      toast.error("That sticker isn't on a box yet, and adding one is for Members and above.");
+      return;
+    }
+    const { data, error: createError } = await supabase
+      .from("equipment_boxes")
+      .insert({
+        code,
+        created_by: profile?.id ?? null,
+        // Straight into the room being looked at, when there is one.
+        ...(view === "location" && openGroup ? { location: openGroup.name } : {}),
+      })
+      .select()
+      .single();
+    if (createError || !data) {
+      toast.error(createError?.message ?? "Couldn't create that box.");
+      return;
+    }
+    toast.success(`Box ${data.code} created — name it and put things in it`);
+    navigate(`/boxes/${encodeURIComponent(data.code)}`);
+  }
+
+  async function addBoxHere() {
+    const { data, error: createError } = await supabase
+      .from("equipment_boxes")
+      .insert({
+        code: generateBoxCode(),
+        created_by: profile?.id ?? null,
+        ...(view === "location" && openGroup ? { location: openGroup.name } : {}),
+      })
+      .select()
+      .single();
+    if (createError || !data) {
+      toast.error(createError?.message ?? "Couldn't create that box.");
+      return;
+    }
+    navigate(`/boxes/${encodeURIComponent(data.code)}`);
+  }
+
   const showingGroupGrid = view !== "all" && openGroup === null;
 
   return (
@@ -208,30 +318,47 @@ export function EquipmentPage() {
             </>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {canTidy && (
-            <Button variant="outline" onClick={() => setCleanupOpen(true)}>
-              <Sparkles className="size-4" />
-              Tidy up
+        {/* Full width on a phone, so three buttons share the row instead of
+            being squeezed to their labels' minimum. Scan comes first: it is
+            the one you press standing in the store. */}
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+          <Button className="flex-1 sm:flex-none" onClick={() => setScanning(true)}>
+            <QrCode className="size-4" />
+            Scan a box
+          </Button>
+          {canEdit && (
+            <Button
+              variant="outline"
+              className="flex-1 sm:flex-none"
+              onClick={openAddDialog}
+            >
+              <Plus className="size-4" />
+              Add item
             </Button>
           )}
-          {canEdit && (
-            <Button onClick={openAddDialog}>
-              <Plus className="size-4" />
-              Add equipment
+          {canTidy && (
+            <Button
+              variant="outline"
+              className="flex-1 sm:flex-none"
+              onClick={() => setCleanupOpen(true)}
+            >
+              <Sparkles className="size-4" />
+              Tidy up
             </Button>
           )}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="inline-flex rounded-md border p-0.5">
+      {/* Stacked on a phone. Three controls on one 375px row left the search
+          box about eight characters wide, which is not a search box. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+        <div className="grid grid-cols-3 rounded-md border p-0.5 sm:inline-flex">
           {VIEW_OPTIONS.map((option) => (
             <button
               key={option.value}
               type="button"
               onClick={() => changeView(option.value)}
-              className={`rounded-sm px-3 py-1 text-sm font-medium transition-colors ${
+              className={`rounded-sm px-3 py-1.5 text-sm font-medium transition-colors sm:py-1 ${
                 view === option.value
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground"
@@ -241,7 +368,7 @@ export function EquipmentPage() {
             </button>
           ))}
         </div>
-        <div className="relative w-full max-w-xs">
+        <div className="relative w-full sm:max-w-xs">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search by name, room, category…"
@@ -254,7 +381,7 @@ export function EquipmentPage() {
           value={conditionFilter}
           onValueChange={(v) => setConditionFilter(v as EquipmentCondition | "All")}
         >
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -274,21 +401,80 @@ export function EquipmentPage() {
           Loading equipment…
         </div>
       ) : showingGroupGrid ? (
-        <EquipmentGroupGrid items={filtered} groupBy={view} onSelect={setOpenGroup} />
-      ) : (
-        <EquipmentTable
-          items={visibleItems}
-          usersById={usersById}
-          loans={loans}
-          canEdit={canEdit}
-          canDelete={canDelete}
-          onEdit={openEditDialog}
-          onDelete={setDeleteTarget}
-          onLend={openLendDialog}
-          onCheck={markChecked}
-          checkingId={checkingId}
+        <EquipmentGroupGrid
+          items={filtered}
+          groupBy={view}
+          onSelect={setOpenGroup}
+          boxCounts={view === "location" ? boxCounts : undefined}
+          alwaysShow={view === "location" ? roomsWithBoxes : undefined}
         />
+      ) : (
+        <>
+          {view === "location" && openGroup && (
+            <section className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-sm font-medium text-muted-foreground">
+                  {openRoomBoxes.length === 0
+                    ? "No boxes in here yet"
+                    : `${openRoomBoxes.length} ${openRoomBoxes.length === 1 ? "box" : "boxes"}`}
+                </h2>
+                {canEdit && (
+                  <Button variant="ghost" size="sm" onClick={addBoxHere}>
+                    <Plus className="size-4" />
+                    New box
+                  </Button>
+                )}
+              </div>
+              {openRoomBoxes.length > 0 && (
+                <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {openRoomBoxes.map((box) => {
+                    const count = itemCountByBox.get(box.id) ?? 0;
+                    return (
+                      <li key={box.id}>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/boxes/${encodeURIComponent(box.code)}`)}
+                          className="group flex w-full items-center gap-3 rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary hover:bg-accent/50"
+                        >
+                          <Box className="size-4 shrink-0 text-primary" />
+                          <div className="flex min-w-0 flex-1 flex-col">
+                            <span className="truncate font-medium">{box.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {count} {count === 1 ? "item" : "items"} · {box.code}
+                            </span>
+                          </div>
+                          <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          )}
+
+          {view === "location" && openGroup && looseItems.length > 0 && (
+            <h2 className="text-sm font-medium text-muted-foreground">
+              Loose in this room
+            </h2>
+          )}
+
+          <EquipmentTable
+            items={looseItems}
+            usersById={usersById}
+            loans={loans}
+            canEdit={canEdit}
+            canDelete={canDelete}
+            onEdit={openEditDialog}
+            onDelete={setDeleteTarget}
+            onLend={openLendDialog}
+            onCheck={markChecked}
+            checkingId={checkingId}
+          />
+        </>
       )}
+
+      <QrScannerDialog open={scanning} onOpenChange={setScanning} onFound={openScanned} />
 
       <EquipmentCleanupDialog
         open={cleanupOpen}

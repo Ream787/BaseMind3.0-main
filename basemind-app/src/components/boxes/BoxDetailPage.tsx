@@ -75,13 +75,15 @@ export function BoxDetailPage() {
   if (!box) {
     return (
       <div className="flex flex-col gap-3">
-        <Link to="/boxes" className="flex items-center gap-1 text-sm text-muted-foreground">
+        <Link to="/equipment" className="flex items-center gap-1 text-sm text-muted-foreground">
           <ArrowLeft className="size-4" />
-          All boxes
+          Equipment
         </Link>
         <div className="flex h-40 flex-col items-center justify-center gap-2 rounded-lg border border-dashed text-center text-sm text-muted-foreground">
           <p>No box with the code {canonical(code)}.</p>
-          <p className="text-xs">Scan its sticker from the boxes page and it will be created.</p>
+          <p className="text-xs">
+            Scan its sticker from the equipment page and it will be created.
+          </p>
         </div>
       </div>
     );
@@ -173,15 +175,23 @@ export function BoxDetailPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Link to="/boxes" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+      {/* Back to the room this box sits in, since that is where boxes are
+          listed — there is no separate boxes page any more. */}
+      <Link
+        to="/equipment"
+        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+      >
         <ArrowLeft className="size-4" />
-        All boxes
+        Equipment
       </Link>
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      {/* Stacked on a phone. Side by side, the name and store fields and the
+          code badge shared one 375px row and left each field 76px wide, which
+          is not enough to read "Cooking box 1" in. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           {canEdit ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <Label htmlFor="box-name" className="text-xs text-muted-foreground">
                   Name
@@ -251,7 +261,7 @@ export function BoxDetailPage() {
             return (
               <li
                 key={item.id}
-                className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 ${
+                className={`flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 ${
                   missing ? "border-destructive/40 bg-destructive/5" : "bg-card"
                 }`}
               >
@@ -272,10 +282,11 @@ export function BoxDetailPage() {
                   </span>
                 </div>
                 {canEdit && (
-                  <div className="flex shrink-0 gap-1">
+                  <div className="flex shrink-0 gap-2 sm:gap-1">
                     <Button
                       variant="outline"
                       size="sm"
+                      className="flex-1 sm:flex-none"
                       disabled={busy}
                       onClick={() => markPresent(item)}
                     >
@@ -285,6 +296,7 @@ export function BoxDetailPage() {
                     <Button
                       variant="outline"
                       size="sm"
+                      className="flex-1 sm:flex-none"
                       disabled={busy}
                       onClick={() => markMissing(item)}
                     >

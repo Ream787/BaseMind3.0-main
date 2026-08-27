@@ -34,8 +34,23 @@ export function groupKeyFor(item: Equipment, groupBy: GroupBy): string {
  * Buckets items by room or category. Items missing the field land in a single
  * catch-all bucket rather than disappearing from the grouped view.
  */
-export function groupEquipment(items: Equipment[], groupBy: GroupBy): EquipmentGroup[] {
+export function groupEquipment(
+  items: Equipment[],
+  groupBy: GroupBy,
+  /**
+   * Buckets to show even when nothing is in them yet.
+   *
+   * A room earns its place by holding a box, not only by holding loose kit:
+   * a brand new box in the container, with nothing in it so far, is exactly
+   * the box someone is about to go and fill.
+   */
+  alwaysShow: { key: string; name: string }[] = [],
+): EquipmentGroup[] {
   const groups = new Map<string, { name: string; items: Equipment[] }>();
+
+  for (const extra of alwaysShow) {
+    if (!groups.has(extra.key)) groups.set(extra.key, { name: extra.name, items: [] });
+  }
 
   for (const item of items) {
     const display = rawValue(item, groupBy) || UNGROUPED_LABEL[groupBy];

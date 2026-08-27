@@ -1,4 +1,4 @@
-import { ChevronRight, DoorOpen, Tags } from "lucide-react";
+import { Box, ChevronRight, DoorOpen, Tags } from "lucide-react";
 
 import type { Equipment } from "@/types/database";
 import { groupEquipment, type GroupBy } from "@/lib/groupEquipment";
@@ -8,10 +8,20 @@ interface EquipmentGroupGridProps {
   items: Equipment[];
   groupBy: GroupBy;
   onSelect: (group: { key: string; name: string }) => void;
+  /** How many boxes each room holds, keyed the same way as the groups. */
+  boxCounts?: Map<string, number>;
+  /** Rooms to list even with nothing loose in them yet. */
+  alwaysShow?: { key: string; name: string }[];
 }
 
-export function EquipmentGroupGrid({ items, groupBy, onSelect }: EquipmentGroupGridProps) {
-  const groups = groupEquipment(items, groupBy);
+export function EquipmentGroupGrid({
+  items,
+  groupBy,
+  onSelect,
+  boxCounts,
+  alwaysShow,
+}: EquipmentGroupGridProps) {
+  const groups = groupEquipment(items, groupBy, alwaysShow);
   const Icon = groupBy === "location" ? DoorOpen : Tags;
 
   if (groups.length === 0) {
@@ -38,7 +48,17 @@ export function EquipmentGroupGrid({ items, groupBy, onSelect }: EquipmentGroupG
             </div>
             <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            {(boxCounts?.get(group.key) ?? 0) > 0 && (
+              <>
+                <span className="flex items-center gap-1 text-foreground">
+                  <Box className="size-3.5" />
+                  {boxCounts?.get(group.key)}{" "}
+                  {boxCounts?.get(group.key) === 1 ? "box" : "boxes"}
+                </span>
+                <span aria-hidden>·</span>
+              </>
+            )}
             <span>
               {group.items.length} {group.items.length === 1 ? "item" : "items"}
             </span>
