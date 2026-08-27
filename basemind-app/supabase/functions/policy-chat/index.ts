@@ -81,7 +81,21 @@ function buildPrompt(policies: Policy[], question: string, history: string): str
     "- Quote at least a full clause, never one or two words.",
     "- Never invent a document, a title, a quote, or a section number.",
     "",
-    'Reply as JSON: {"answer": string, "citations": [{"policy_id": string, "quote": string}]}',
+    "WHEN THE DOCUMENTS DON'T ANSWER THE QUESTION:",
+    "- Set \"covered\" to false. Set it to true whenever you did answer.",
+    "- Say what IS missing, specifically: name the thing the documents are silent",
+    "  about, rather than repeating the question back.",
+    "- Then be useful anyway. If the documents say something adjacent — a related",
+    "  rule, a general principle, a section that nearly applies — give it and cite",
+    "  it, making clear it does not settle the question. If there is genuinely",
+    "  nothing adjacent, say that instead of stretching for it.",
+    "- Fill \"related\" with up to three questions THESE documents can actually",
+    "  answer. Each must be specific, self-contained, and answerable from the text",
+    "  in front of you. No generic filler like \"What are the safety rules?\".",
+    "- Never pad a non-answer with outside knowledge to make it feel more helpful.",
+    "  A clear \"this isn't written down anywhere\" is the useful answer.",
+    "",
+    'Reply as JSON: {"answer": string, "covered": boolean, "related": string[], "citations": [{"policy_id": string, "quote": string}]}',
     "The quote must be an exact substring of that document's text.",
     "",
     history ? `EARLIER IN THIS CONVERSATION:\n${history}\n` : "",
@@ -186,7 +200,12 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    let parsed: { answer?: string; citations?: { policy_id?: string; quote?: string }[] };
+    let parsed: {
+      answer?: string;
+      covered?: boolean;
+      related?: unknown;
+      citations?: { policy_id?: string; quote?: string }[];
+    };
     try {
       parsed = JSON.parse(text);
     } catch {
@@ -223,7 +242,21 @@ Deno.serve(async (req: Request) => {
       citations.push({ policy_id: policy.id, policy_title: policy.title, quote });
     }
 
-    return json({ answer: parsed.answer ?? "", citations, rejected });
+    return json({
+      answer: parsed.answer ?? "",
+      // Passed on only when the model actually returned it. Leaving it out
+      // (rather than defaulting it to true) lets the browser fall back to
+      // reading the prose, which beats asserting a verdict nobody gave.
+      covered: typeof parsed.covered === "boolean" ? parsed.covered : undefined,
+      // Trimmed here as well as in the browser: this is the boundary where
+      // model output stops being trusted, and the browser may be an older
+      // build that trims less.
+      related: Array.isArray(parsed.related)
+        ? parsed.related.filter((r: unknown): r is string => typeof r === "string").slice(0, 3)
+        : [],
+      citations,
+      rejected,
+    });
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : "Unexpected error" }, 500);
   }

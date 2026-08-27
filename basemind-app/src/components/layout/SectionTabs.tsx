@@ -61,7 +61,18 @@ export const CAMP_TABS: SectionTab[] = [
   { to: "/events", label: "Calendar", feature: "events" },
   { to: "/sites", label: "Sites", feature: "sites" },
   { to: "/forms", label: "Forms", feature: "forms" },
-  { to: "/policies", label: "Policies", feature: "policies" },
+];
+
+/**
+ * The assistant is its own section, not a tab under Camps.
+ *
+ * It answers about anything the group has written down — safety, transport,
+ * money, behaviour — so filing it under camps put it somewhere nobody would
+ * look for the answer to "what do I do about a photo consent form".
+ */
+export const ASSISTANT_TABS: SectionTab[] = [
+  { to: "/assistant", label: "Ask", feature: "policies" },
+  { to: "/policies", label: "Documents", feature: "policies" },
 ];
 
 export const FOOD_TABS: SectionTab[] = [

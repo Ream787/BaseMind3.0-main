@@ -1,16 +1,18 @@
 import { useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
-import { FileText, Loader2, Search, Trash2, Upload } from "lucide-react";
+import { FileText, Link2, Loader2, RefreshCw, Search, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
+import { isSupportedDocument, UnreadableDocumentError } from "@/lib/documentText";
 import {
-  extractDocumentText,
-  isSupportedDocument,
-  UnreadableDocumentError,
-} from "@/lib/documentText";
+  downloadPolicyPdf,
+  findByTitle,
+  savePolicyDocument,
+  titleFromFileName,
+} from "@/lib/policyDocuments";
 import type { Policy } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +27,24 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-import { PolicyChat } from "@/components/policies/PolicyChat";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { SectionTabs, ASSISTANT_TABS } from "@/components/layout/SectionTabs";
+
+/** Just the site name from a link, since the full URL never fits. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
 
 export function PoliciesPage() {
   const { hasRole, profile } = useAuth();
@@ -36,6 +55,9 @@ export function PoliciesPage() {
   const [search, setSearch] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Policy | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [link, setLink] = useState("");
+  const [refreshing, setRefreshing] = useState<string | null>(null);
 
   // Adding a policy changes what the assistant tells everyone, so it's held
   // to Manager and above — the same bar as the database enforces.
@@ -59,42 +81,94 @@ export function PoliciesPage() {
 
     setUploading(true);
     try {
-      // Extract first: a document with no readable text is useless to the
-      // assistant, so it's rejected before anything is stored rather than
-      // sitting in the list never appearing in an answer.
-      const { text, pageCount } = await extractDocumentText(file);
-
-      let storagePath: string | null = null;
-      if (file.type === "application/pdf") {
-        const path = `${crypto.randomUUID()}.pdf`;
-        const { error: uploadError } = await supabase.storage
-          .from("policies")
-          .upload(path, file, { contentType: "application/pdf" });
-        if (uploadError) throw new Error(uploadError.message);
-        storagePath = path;
-      }
-
-      const { error: insertError } = await supabase.from("policies").insert({
-        title: file.name.replace(/\.(pdf|txt|md)$/i, ""),
-        description: null,
-        category: null,
-        storage_path: storagePath,
-        content: text,
-        page_count: pageCount,
-        created_by: profile?.id ?? null,
+      const title = titleFromFileName(file.name);
+      const saved = await savePolicyDocument({
+        file,
+        title,
+        existing: findByTitle(policies, title),
+        userId: profile?.id ?? null,
       });
-      if (insertError) throw new Error(insertError.message);
-
-      toast.success(
-        `${file.name} added — ${text.length.toLocaleString()} characters of text read`,
-      );
+      announce(saved.title, saved.replaced, saved.characters);
     } catch (err) {
-      if (err instanceof UnreadableDocumentError) toast.error(err.message, { duration: 8000 });
-      else toast.error(err instanceof Error ? err.message : "Couldn't add that document.");
+      reportSaveFailure(err);
     } finally {
       setUploading(false);
       if (fileInput.current) fileInput.current.value = "";
     }
+  }
+
+  /**
+   * Adds a policy from a link.
+   *
+   * The download itself happens in an Edge Function, not here — almost no site
+   * serves a PDF with headers that let another origin read it, so fetching it
+   * from the browser would fail on links a person can open perfectly well.
+   */
+  async function handleLink() {
+    const url = link.trim();
+    if (!url || uploading) return;
+
+    setUploading(true);
+    try {
+      const file = await downloadPolicyPdf(url);
+      const title = titleFromFileName(file.name);
+      const saved = await savePolicyDocument({
+        file,
+        bytes: await file.arrayBuffer(),
+        title,
+        sourceUrl: url,
+        existing: findByTitle(policies, title),
+        userId: profile?.id ?? null,
+      });
+      announce(saved.title, saved.replaced, saved.characters);
+      setLink("");
+      setLinkOpen(false);
+    } catch (err) {
+      reportSaveFailure(err);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  /** Re-downloads a linked document and replaces it in place. */
+  async function refreshFromSource(policy: Policy) {
+    if (!policy.source_url) return;
+    setRefreshing(policy.id);
+    try {
+      const file = await downloadPolicyPdf(policy.source_url);
+      const saved = await savePolicyDocument({
+        file,
+        bytes: await file.arrayBuffer(),
+        // Keep the name it already has: replacing in place is the point, and
+        // the file name at the far end may well have changed.
+        title: policy.title,
+        sourceUrl: policy.source_url,
+        existing: policy,
+        userId: profile?.id ?? null,
+      });
+      toast.success(
+        `${saved.title} updated — ${saved.characters.toLocaleString()} characters of text read`,
+      );
+    } catch (err) {
+      reportSaveFailure(err);
+    } finally {
+      setRefreshing(null);
+    }
+  }
+
+  function announce(title: string, replaced: boolean, characters: number) {
+    toast.success(
+      replaced
+        ? `${title} replaced — ${characters.toLocaleString()} characters of text read`
+        : `${title} added — ${characters.toLocaleString()} characters of text read`,
+    );
+  }
+
+  function reportSaveFailure(err: unknown) {
+    if (err instanceof UnreadableDocumentError) toast.error(err.message, { duration: 8000 });
+    else toast.error(err instanceof Error ? err.message : "Couldn't add that document.", {
+      duration: 8000,
+    });
   }
 
   async function openOriginal(policy: Policy) {
@@ -124,15 +198,17 @@ export function PoliciesPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <SectionTabs tabs={ASSISTANT_TABS} />
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1>Policies</h1>
+          <h1>Documents</h1>
           <p className="text-sm text-muted-foreground">
-            Your group&apos;s rules, and an assistant that answers from them.
+            Your group&apos;s rules. These are the only thing the assistant answers from.
           </p>
         </div>
         {canManage && (
-          <>
+          <div className="flex flex-wrap gap-2">
             <input
               ref={fileInput}
               type="file"
@@ -143,11 +219,15 @@ export function PoliciesPage() {
                 if (file) handleUpload(file);
               }}
             />
+            <Button variant="outline" onClick={() => setLinkOpen(true)} disabled={uploading}>
+              <Link2 className="size-4" />
+              Add from link
+            </Button>
             <Button onClick={() => fileInput.current?.click()} disabled={uploading}>
               {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-              {uploading ? "Reading…" : "Add policy"}
+              {uploading ? "Reading…" : "Upload"}
             </Button>
-          </>
+          </div>
         )}
       </div>
 
@@ -157,17 +237,10 @@ export function PoliciesPage() {
         </p>
       )}
 
-      {/* ---- Ask ---------------------------------------------------------- */}
       <section className="flex flex-col gap-3">
-        <h2 className="font-medium">Ask a question</h2>
-        <PolicyChat policies={policies} />
-      </section>
-
-      {/* ---- Documents ---------------------------------------------------- */}
-      <section className="flex flex-col gap-3 border-t pt-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-medium">
-            Documents{policies.length > 0 && ` (${policies.length})`}
+            {policies.length > 0 ? `${policies.length} in the shelf` : "Nothing added yet"}
           </h2>
           {policies.length > 0 && (
             <div className="relative w-full max-w-xs">
@@ -208,8 +281,15 @@ export function PoliciesPage() {
                     <span className="font-medium">{policy.title}</span>
                     <span className="text-xs text-muted-foreground">
                       {policy.page_count ? `${policy.page_count} pages · ` : ""}
-                      added {format(parseISO(policy.created_at), "d MMM yyyy")}
+                      {policy.source_fetched_at
+                        ? `downloaded ${format(parseISO(policy.source_fetched_at), "d MMM yyyy")}`
+                        : `added ${format(parseISO(policy.created_at), "d MMM yyyy")}`}
                     </span>
+                    {policy.source_url && (
+                      <span className="truncate text-xs text-muted-foreground">
+                        from {hostOf(policy.source_url)}
+                      </span>
+                    )}
                     {policy.description && (
                       <span className="mt-1 text-sm text-muted-foreground">
                         {policy.description}
@@ -226,6 +306,20 @@ export function PoliciesPage() {
                         onClick={() => openOriginal(policy)}
                       >
                         Open
+                      </Button>
+                    )}
+                    {canManage && policy.source_url && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Check ${policy.title} for an update`}
+                        title="Download it again from the link and replace this copy"
+                        disabled={refreshing === policy.id}
+                        onClick={() => refreshFromSource(policy)}
+                      >
+                        <RefreshCw
+                          className={`size-4 ${refreshing === policy.id ? "animate-spin" : ""}`}
+                        />
                       </Button>
                     )}
                     {canManage && (
@@ -245,6 +339,57 @@ export function PoliciesPage() {
           </ul>
         )}
       </section>
+
+      <Dialog open={linkOpen} onOpenChange={(open) => !uploading && setLinkOpen(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add a policy from a link</DialogTitle>
+            <DialogDescription>
+              Paste a link straight to a PDF and it&apos;s downloaded, read and kept here. If a
+              document with the same name already exists, this replaces it.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="flex flex-col gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleLink();
+            }}
+          >
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="policy-link">PDF link</Label>
+              <Input
+                id="policy-link"
+                type="url"
+                inputMode="url"
+                placeholder="https://example.org/safety-policy.pdf"
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+                disabled={uploading}
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground">
+                It has to be the PDF itself, not the page it sits on. A document behind a
+                sign-in can&apos;t be reached — save it and upload the file instead.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLinkOpen(false)}
+                disabled={uploading}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={uploading || !link.trim()}>
+                {uploading && <Loader2 className="size-4 animate-spin" />}
+                {uploading ? "Downloading…" : "Download"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>

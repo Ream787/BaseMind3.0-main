@@ -48,6 +48,9 @@ const UserManagementPage = lazy(() =>
 const PoliciesPage = lazy(() =>
   import("@/components/policies/PoliciesPage").then((m) => ({ default: m.PoliciesPage })),
 );
+const AssistantPage = lazy(() =>
+  import("@/components/policies/AssistantPage").then((m) => ({ default: m.AssistantPage })),
+);
 const AdminPage = lazy(() =>
   import("@/components/admin/AdminPage").then((m) => ({ default: m.AdminPage })),
 );
@@ -108,6 +111,7 @@ export const router = createBrowserRouter([
       { path: "menus", element: <Gate feature="menus"><MenusPage /></Gate> },
       { path: "food", element: <Gate feature="food"><FoodPage /></Gate> },
       { path: "forms", element: <Gate feature="forms"><FormsPage /></Gate> },
+      { path: "assistant", element: <Gate feature="policies"><AssistantPage /></Gate> },
       { path: "policies", element: <Gate feature="policies"><PoliciesPage /></Gate> },
       { path: "profile", element: <Lazy><ProfilePage /></Lazy> },
       {
