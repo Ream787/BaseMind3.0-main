@@ -6,6 +6,7 @@ import { CloudOff } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useOffline } from "@/context/OfflineContext";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/ui/logo";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -67,7 +68,9 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>BaseMind</CardTitle>
+          <CardTitle>
+            <Logo className="size-14" />
+          </CardTitle>
           <CardDescription>Sign in to your equipment tracker</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>

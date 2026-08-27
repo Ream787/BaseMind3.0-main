@@ -15,6 +15,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useFeatures } from "@/context/FeaturesContext";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/ui/logo";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { OfflineBanner } from "@/components/layout/OfflineBanner";
 import {
@@ -91,7 +92,7 @@ export function AppLayout() {
           32px controls, and the extra padding only pushed the page down. */}
       <header className="flex items-center justify-between gap-2 border-b px-4 py-1.5 sm:py-3">
         <div className="flex min-w-0 items-center gap-6">
-          <span className="shrink-0 text-lg font-semibold text-primary">BaseMind</span>
+          <Logo className="size-8" />
           {/* On phones this row is hidden and the bottom bar takes over —
               easier to reach one-handed. */}
           <nav className="hidden items-center gap-1 md:flex">
