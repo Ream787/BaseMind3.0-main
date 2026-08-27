@@ -10,7 +10,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.svg", "maskable-icon.svg", "apple-touch-icon.png"],
+      includeAssets: ["favicon.svg"],
       manifest: {
         name: "BaseMind",
         short_name: "BaseMind",
@@ -20,13 +20,7 @@ export default defineConfig({
         display: "standalone",
         start_url: "/",
         icons: [
-          { src: "favicon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
-          // Launchers crop a maskable icon to their own shape, so this one is
-          // full-bleed with the tent pulled into the safe circle. The rounded
-          // favicon would lose its corners and the ground line to that crop.
-          { src: "maskable-icon.svg", sizes: "any", type: "image/svg+xml", purpose: "maskable" },
-          // PNG fallback for anything that won't read an SVG icon — iOS above all.
-          { src: "apple-touch-icon.png", sizes: "180x180", type: "image/png", purpose: "any" },
+          { src: "favicon.svg", sizes: "any", type: "image/svg+xml", purpose: "any maskable" },
         ],
       },
       workbox: {

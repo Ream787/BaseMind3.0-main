@@ -4,7 +4,7 @@ import { cn } from "./utils";
 
 /**
  * The BaseMind mark. Kept byte-identical to public/favicon.svg — if you redraw
- * one, redraw the other, plus the maskable and apple-touch variants beside it.
+ * one, redraw the other.
  *
  * The purple is hardcoded rather than themed: a logo that changes colour
  * between light and dark stops being a logo. White on this purple clears
