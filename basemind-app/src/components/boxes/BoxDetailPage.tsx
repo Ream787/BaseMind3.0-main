@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { addMonths, format, parseISO } from "date-fns";
-import { ArrowLeft, Check, Plus, QrCode, X } from "lucide-react";
+import { useNavigate } from "react-router";
+import { ArrowLeft, Check, Plus, QrCode, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
+import { useOffline } from "@/context/OfflineContext";
 import { useEquipment } from "@/context/EquipmentContext";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
 import { canonical } from "@/lib/boxes";
@@ -16,6 +18,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { BoxQrCode } from "@/components/boxes/BoxQrCode";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 
 /** How long a check is good for. Matches the button on the equipment list. */
 const MONTHS_UNTIL_NEXT_CHECK = 6;
@@ -30,7 +42,9 @@ const MONTHS_UNTIL_NEXT_CHECK = 6;
  */
 export function BoxDetailPage() {
   const { code = "" } = useParams();
+  const navigate = useNavigate();
   const { profile, hasRole } = useAuth();
+  const { online } = useOffline();
   const { equipment, updateEquipment } = useEquipment();
   const { rows: boxes, loading } = useRealtimeTable("equipment_boxes", { orderBy: "name" });
   const { rows: placements } = useRealtimeTable("equipment_placements");
@@ -42,8 +56,23 @@ export function BoxDetailPage() {
   const [adding, setAdding] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [draftLocation, setDraftLocation] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const canEdit = hasRole(["Admin", "Manager", "Member"]);
+  // Same bar as deleting equipment: getting rid of a box is a decision about
+  // everyone's store, not about the item in your hand.
+  const canDelete = hasRole(["Admin", "Manager"]);
+
+  /**
+   * Why the write controls are shut, if they are.
+   *
+   * Checking kit and moving it between boxes are UPDATES, and the offline
+   * outbox only carries new rows. Taking a tap and dropping it would be worse
+   * than not offering it: someone would walk away believing the box had been
+   * checked.
+   */
+  const blocked = !online ? "You're offline — changes can't be saved yet" : null;
 
   const box = useMemo(
     () => boxes.find((b) => canonical(b.code) === canonical(code)),
@@ -161,6 +190,36 @@ export function BoxDetailPage() {
       toast.error(err instanceof Error ? err.message : "Couldn't record that.");
     } finally {
       setBusyId(null);
+    }
+  }
+
+  /**
+   * Remove the box, leaving what was in it loose in the room.
+   *
+   * The contents are tipped out rather than deleted: placements cascade from
+   * the box, so a plain delete would take the record of six mallets being in
+   * the container with it and nobody would find out until they went looking.
+   */
+  async function removeBox(keepContents: boolean) {
+    if (!box) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase.rpc("delete_equipment_box", {
+        p_box_id: box.id,
+        p_keep_contents: keepContents,
+      });
+      if (error) throw new Error(error.message);
+      toast.success(
+        keepContents && contents.length > 0
+          ? `${box.name} removed — its ${contents.length === 1 ? "item is" : "items are"} now loose in ${box.location}`
+          : `${box.name} removed`,
+      );
+      navigate("/equipment");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't remove that box.");
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
     }
   }
 
@@ -282,6 +341,7 @@ export function BoxDetailPage() {
                   value={draftName}
                   onChange={(e) => setDraftName(e.target.value)}
                   onBlur={saveHeader}
+                  disabled={blocked !== null}
                   placeholder="Cooking box 1"
                 />
               </div>
@@ -295,6 +355,7 @@ export function BoxDetailPage() {
                   value={draftLocation}
                   onChange={(e) => setDraftLocation(e.target.value)}
                   onBlur={saveHeader}
+                  disabled={blocked !== null}
                   placeholder="Store Room"
                 />
                 <datalist id="box-location-options">
@@ -324,6 +385,18 @@ export function BoxDetailPage() {
             <QrCode className="size-4" />
             {showQr ? "Hide" : "Sticker"}
           </Button>
+          {canDelete && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Remove ${box.name}`}
+              disabled={deleting || blocked !== null}
+              title={blocked ?? `Remove ${box.name}`}
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -371,7 +444,7 @@ export function BoxDetailPage() {
                       aria-label={`How many ${item.name} are in this box`}
                       className="h-8 w-16"
                       defaultValue={placement.quantity}
-                      disabled={busy}
+                      disabled={busy || blocked !== null}
                       onBlur={(e) => {
                         const next = Math.max(0, Number(e.target.value) || 0);
                         if (next !== placement.quantity) void setPlacedQuantity(placement, next);
@@ -381,7 +454,7 @@ export function BoxDetailPage() {
                       variant="outline"
                       size="sm"
                       className="flex-1 sm:flex-none"
-                      disabled={busy}
+                      disabled={busy || blocked !== null}
                       onClick={() => markPresent(item)}
                     >
                       <Check className="size-4" />
@@ -391,7 +464,7 @@ export function BoxDetailPage() {
                       variant="outline"
                       size="sm"
                       className="flex-1 sm:flex-none"
-                      disabled={busy}
+                      disabled={busy || blocked !== null}
                       onClick={() => markMissing(item)}
                     >
                       <X className="size-4" />
@@ -409,10 +482,10 @@ export function BoxDetailPage() {
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">
             <Input
-              placeholder="Add something in this box…"
+              placeholder={blocked ?? "Add something in this box…"}
               value={newItem}
               onChange={(e) => setNewItem(e.target.value)}
-              disabled={adding}
+              disabled={adding || blocked !== null}
             />
             <Input
               type="number"
@@ -422,7 +495,7 @@ export function BoxDetailPage() {
               className="w-20"
               value={newQuantity}
               onChange={(e) => setNewQuantity(e.target.value)}
-              disabled={adding}
+              disabled={adding || blocked !== null}
             />
           </div>
 
@@ -435,7 +508,7 @@ export function BoxDetailPage() {
                 <li key={item.id}>
                   <button
                     type="button"
-                    disabled={adding}
+                    disabled={adding || blocked !== null}
                     onClick={() =>
                       addExisting(item, Math.max(1, Number(newQuantity) || 1))
                     }
@@ -454,7 +527,7 @@ export function BoxDetailPage() {
           {newItem.trim() && (
             <Button
               variant={addable.length > 0 ? "outline" : "default"}
-              disabled={adding}
+              disabled={adding || blocked !== null}
               onClick={addNew}
             >
               <Plus className="size-4" />
@@ -465,6 +538,26 @@ export function BoxDetailPage() {
           )}
         </div>
       )}
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {box.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {contents.length === 0
+                ? "The box is empty, so nothing else changes. Its sticker code stops working — scanning it again would make a new box."
+                : contents.length === 1
+                  ? `The item in it stays in the inventory and becomes loose in ${box.location}. Nothing is deleted except the box itself.`
+                  : `The ${contents.length} items in it stay in the inventory and become loose in ${box.location}. Nothing is deleted except the box itself.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction disabled={deleting} onClick={() => removeBox(true)}>
+              Remove the box
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

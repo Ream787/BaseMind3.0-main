@@ -397,6 +397,10 @@ export type Database = {
         };
         Returns: void;
       };
+      delete_equipment_box: {
+        Args: { p_box_id: string; p_keep_contents?: boolean };
+        Returns: void;
+      };
       merge_equipment: {
         Args: { keep_id: string; drop_id: string };
         Returns: void;

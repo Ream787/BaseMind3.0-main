@@ -88,13 +88,20 @@ export function EquipmentFormDialog({
 }: EquipmentFormDialogProps) {
   const { addEquipment, updateEquipment } = useEquipment();
   const [form, setForm] = useState<FormState>(emptyForm);
+  // What the form looked like when it opened, so "has anything been typed"
+  // is a comparison rather than a guess.
+  const [initial, setInitial] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setForm(equipment ? toFormState(equipment) : emptyForm);
+      const start = equipment ? toFormState(equipment) : emptyForm;
+      setForm(start);
+      setInitial(start);
     }
   }, [open, equipment]);
+
+  const dirty = JSON.stringify(form) !== JSON.stringify(initial);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -148,7 +155,18 @@ export function EquipmentFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      {/* A tap just outside the dialog used to close it and throw away
+          everything typed. On a phone that is a miss, not a decision — the
+          form is most of the screen and the margin around it is thin. Once
+          something has been entered, only Cancel, Escape or saving closes
+          it; an untouched form still closes on a tap, because there is
+          nothing to lose. */}
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sm:max-w-lg"
+        onInteractOutside={(e) => {
+          if (dirty) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{equipment ? "Edit equipment" : "Add equipment"}</DialogTitle>
           <DialogDescription>

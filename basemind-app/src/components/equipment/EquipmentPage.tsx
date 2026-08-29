@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
+import { useOffline } from "@/context/OfflineContext";
 import { useEquipment } from "@/context/EquipmentContext";
 import type { Equipment, EquipmentCondition } from "@/types/database";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,7 @@ interface UserOption {
 export function EquipmentPage() {
   const navigate = useNavigate();
   const { hasRole, profile } = useAuth();
+  const { online } = useOffline();
   const { equipment, loading, error, updateEquipment } = useEquipment();
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [cleanupOpen, setCleanupOpen] = useState(false);
@@ -96,6 +98,16 @@ export function EquipmentPage() {
   // sits with deleting rather than with editing: a Member can correct the
   // item in front of them, not restructure everyone else's list.
   const canTidy = hasRole(["Admin", "Manager"]);
+
+  /**
+   * Why the write controls are shut, if they are.
+   *
+   * Everything here is an update or needs the network — checking an item,
+   * creating a box, asking the model to look for duplicates. The offline
+   * outbox only carries new rows, so offering these and dropping them would
+   * leave somebody believing a check had been recorded when it hadn't.
+   */
+  const blocked = !online ? "You're offline — changes can't be saved yet" : null;
 
   useEffect(() => {
     supabase
@@ -374,7 +386,12 @@ export function EquipmentPage() {
             being squeezed to their labels' minimum. Scan comes first: it is
             the one you press standing in the store. */}
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-          <Button className="flex-1 sm:flex-none" onClick={() => setScanning(true)}>
+          <Button
+            className="flex-1 sm:flex-none"
+            onClick={() => setScanning(true)}
+            disabled={blocked !== null}
+            title={blocked ?? "Scan a box sticker"}
+          >
             <QrCode className="size-4" />
             Scan a box
           </Button>
@@ -383,6 +400,8 @@ export function EquipmentPage() {
               variant="outline"
               className="flex-1 sm:flex-none"
               onClick={openAddDialog}
+              disabled={blocked !== null}
+              title={blocked ?? "Add an item to the inventory"}
             >
               <Plus className="size-4" />
               Add item
@@ -393,6 +412,8 @@ export function EquipmentPage() {
               variant="outline"
               className="flex-1 sm:flex-none"
               onClick={() => setCleanupOpen(true)}
+              disabled={blocked !== null}
+              title={blocked ?? "Look for duplicates and repeated spellings"}
             >
               <Sparkles className="size-4" />
               Tidy up
@@ -471,7 +492,13 @@ export function EquipmentPage() {
                     : `${openRoomBoxes.length} ${openRoomBoxes.length === 1 ? "box" : "boxes"}`}
                 </h2>
                 {canEdit && (
-                  <Button variant="ghost" size="sm" onClick={addBoxHere}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={addBoxHere}
+                    disabled={blocked !== null}
+                    title={blocked ?? "Add a box to this room"}
+                  >
                     <Plus className="size-4" />
                     New box
                   </Button>
@@ -522,6 +549,7 @@ export function EquipmentPage() {
             onLend={openLendDialog}
             onCheck={markChecked}
             checkingId={checkingId}
+            writesBlocked={blocked}
             placementSummary={placementSummary}
           />
         </>

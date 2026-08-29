@@ -85,10 +85,15 @@ export function LoanFormDialog({
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Snapshot of the form as opened, so "has anything been typed" is a
+  // comparison rather than a guess.
+  const [initial, setInitial] = useState<FormState | null>(null);
+  const dirty = initial !== null && JSON.stringify(form) !== JSON.stringify(initial);
+
   useEffect(() => {
     if (!open) return;
     setFormError(null);
-    setForm(
+    const start: FormState =
       editing
         ? {
             equipment_id: editing.equipment_id,
@@ -102,8 +107,9 @@ export function LoanFormDialog({
             due_back: editing.due_back ?? "",
             notes: editing.notes ?? "",
           }
-        : emptyForm(presetEquipmentId),
-    );
+        : emptyForm(presetEquipmentId);
+    setForm(start);
+    setInitial(start);
   }, [open, editing, presetEquipmentId]);
 
   const borrowers = useMemo(() => knownBorrowers(loans), [loans]);
@@ -201,7 +207,15 @@ export function LoanFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      {/* A tap outside used to close this and lose everything typed. On a
+          phone that is a miss, not a decision. Once something has been
+          entered, only Cancel, Escape or saving closes it. */}
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto"
+        onInteractOutside={(e) => {
+          if (dirty) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{editing ? "Edit loan" : "Lend equipment"}</DialogTitle>
           <DialogDescription>

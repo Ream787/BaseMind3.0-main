@@ -39,6 +39,8 @@ interface EquipmentTableProps {
    * place and so could not describe kit split across two.
    */
   placementSummary?: Map<string, string>;
+  /** Set when writes can't go through — offline, mainly. Explains why. */
+  writesBlocked?: string | null;
   /** Id currently being stamped, so its button can show it is working. */
   checkingId: string | null;
 }
@@ -70,6 +72,7 @@ export function EquipmentTable({
   onCheck,
   checkingId,
   placementSummary,
+  writesBlocked,
 }: EquipmentTableProps) {
   if (items.length === 0) {
     return (
@@ -145,9 +148,9 @@ export function EquipmentTable({
                     <Button
                       variant="ghost"
                       size="sm"
-                      disabled={checkingId === item.id}
+                      disabled={checkingId === item.id || !!writesBlocked}
                       onClick={() => onCheck(item)}
-                      title="Record that you checked this today"
+                      title={writesBlocked ?? "Record that you checked this today"}
                     >
                       <ClipboardCheck className="size-4" />
                       Check
@@ -246,10 +249,10 @@ export function EquipmentTable({
                           <Button
                             variant="ghost"
                             size="icon"
-                            disabled={checkingId === item.id}
+                            disabled={checkingId === item.id || !!writesBlocked}
                             onClick={() => onCheck(item)}
                             aria-label={`Mark ${item.name} as checked today`}
-                            title="Record that you checked this today"
+                            title={writesBlocked ?? "Record that you checked this today"}
                           >
                             <ClipboardCheck className="size-4" />
                           </Button>

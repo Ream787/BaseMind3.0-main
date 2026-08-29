@@ -53,10 +53,13 @@ export function EventFormDialog({
   const [submitting, setSubmitting] = useState(false);
   const [dateError, setDateError] = useState<string | null>(null);
 
+  const [initial, setInitial] = useState<typeof emptyForm | null>(null);
+  const dirty = initial !== null && JSON.stringify(form) !== JSON.stringify(initial);
+
   useEffect(() => {
     if (!open) return;
     setDateError(null);
-    setForm(
+    const start =
       event
         ? {
             name: event.name,
@@ -65,8 +68,9 @@ export function EventFormDialog({
             site_id: event.site_id ?? NO_SITE,
             notes: event.notes ?? "",
           }
-        : { ...emptyForm, start_date: defaultDate ?? "" },
-    );
+        : { ...emptyForm, start_date: defaultDate ?? "" };
+    setForm(start);
+    setInitial(start);
   }, [open, event, defaultDate]);
 
   async function handleSubmit(e: FormEvent) {
@@ -106,7 +110,14 @@ export function EventFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      {/* A tap outside used to close this and lose everything typed. On a
+          phone that is a miss, not a decision. Once something has been
+          entered, only Cancel, Escape or saving closes it. */}
+      <DialogContent
+        onInteractOutside={(e) => {
+          if (dirty) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{event ? "Edit event" : "Add event"}</DialogTitle>
           <DialogDescription>
