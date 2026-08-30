@@ -1,6 +1,16 @@
 import { useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
-import { FileText, FolderTree, Link2, Loader2, RefreshCw, Search, Trash2, Upload } from "lucide-react";
+import {
+  DownloadCloud,
+  FileText,
+  FolderTree,
+  Link2,
+  Loader2,
+  RefreshCw,
+  Search,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
@@ -62,6 +72,7 @@ export function PoliciesPage() {
   const [link, setLink] = useState("");
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [sorting, setSorting] = useState(false);
+  const [bulk, setBulk] = useState<{ done: number; total: number } | null>(null);
 
   // Adding a policy changes what the assistant tells everyone, so it's held
   // to Manager and above — the same bar as the database enforces.
@@ -175,6 +186,65 @@ export function PoliciesPage() {
     });
   }
 
+  /** Listed but not yet readable: a link, and no text behind it. */
+  const missingText = useMemo(
+    () => policies.filter((p) => p.source_url && !p.content.trim()),
+    [policies],
+  );
+
+  /**
+   * Fetches every document that has a link but no text yet.
+   *
+   * This is what turns a bulk-added list into something the assistant can
+   * answer from: SQL can add a title and a link, but pulling the words out of
+   * a PDF needs the file itself.
+   *
+   * One at a time, deliberately. Eighty parallel downloads would hammer
+   * scouts.org.za and trip whatever rate limit it has, and the failure would
+   * look like "some documents randomly didn't work". Slower and complete
+   * beats fast and patchy.
+   *
+   * One document failing doesn't stop the rest — a moved link or a scanned
+   * PDF with no text in it is entirely likely across eighty of them, and the
+   * others are still worth having.
+   */
+  async function downloadMissing() {
+    const queue = missingText;
+    if (queue.length === 0) return;
+
+    setBulk({ done: 0, total: queue.length });
+    const failed: string[] = [];
+
+    for (const [index, policy] of queue.entries()) {
+      try {
+        const file = await downloadPolicyPdf(policy.source_url!);
+        await savePolicyDocument({
+          file,
+          bytes: await file.arrayBuffer(),
+          title: policy.title,
+          sourceUrl: policy.source_url,
+          existing: policy,
+          userId: profile?.id ?? null,
+        });
+      } catch {
+        failed.push(policy.title);
+      }
+      setBulk({ done: index + 1, total: queue.length });
+    }
+
+    setBulk(null);
+    const read = queue.length - failed.length;
+    if (failed.length === 0) {
+      toast.success(`Read all ${read} documents`);
+    } else {
+      toast.warning(
+        `Read ${read} of ${queue.length}. Couldn't read: ${failed.slice(0, 3).join(", ")}` +
+          (failed.length > 3 ? ` and ${failed.length - 3} more` : ""),
+        { duration: 10000 },
+      );
+    }
+  }
+
   /**
    * Files the documents into categories.
    *
@@ -274,6 +344,26 @@ export function PoliciesPage() {
                 if (file) handleUpload(file);
               }}
             />
+            {missingText.length > 0 && (
+              <Button
+                onClick={downloadMissing}
+                disabled={bulk !== null || !online}
+                title={
+                  online
+                    ? "Fetch and read every document that has a link but no text yet"
+                    : "Needs a connection"
+                }
+              >
+                {bulk ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <DownloadCloud className="size-4" />
+                )}
+                {bulk
+                  ? `Reading ${bulk.done} of ${bulk.total}…`
+                  : `Download missing text (${missingText.length})`}
+              </Button>
+            )}
             {policies.length > 1 && (
               <Button
                 variant="outline"
