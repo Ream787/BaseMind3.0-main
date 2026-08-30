@@ -3,10 +3,10 @@
  *
  * Two kinds of finding, deliberately kept apart:
  *
- *   EXACT      computed here, from the rows themselves. Two items with the
- *              same name in the same place is a fact, not an opinion, and
- *              it needs no model to spot. These always appear, even when
- *              the assistant is switched off or out of quota.
+ *   EXACT      computed here, from the rows themselves. Two rows sharing a
+ *              name is a fact, not an opinion, and needs no model to spot.
+ *              These always appear, even when the assistant is switched off
+ *              or out of quota.
  *
  *   SUGGESTED  from the model, for the judgement calls — is "Strore Room"
  *              the same place as "Store Room"? Is "malet" a typo? That is
@@ -22,10 +22,11 @@ import type { Equipment } from "@/types/database";
 
 export type DuplicateFinding = {
   kind: "duplicate";
-  /** Same name, same place — the rows are almost certainly one thing. */
+  /** Rows sharing a name: almost certainly one thing entered more than once. */
   itemIds: string[];
   name: string;
-  location: string;
+  /** Where those rows currently say they are, for the description. */
+  locations: string[];
 };
 
 export type VariantFinding = {
@@ -63,17 +64,24 @@ export type Finding = DuplicateFinding | VariantFinding | ItemVariantFinding;
 const norm = (v: string | null) => (v ?? "").replace(/\s+/g, " ").trim().toLowerCase();
 
 /**
- * Items that share a name AND a place.
+ * Items that share a name, wherever they are.
  *
- * The same name in two different rooms is left alone on purpose: a group
- * genuinely has a first aid kit in the store and another in the minibus, and
- * calling that a duplicate would train people to ignore this list.
+ * This used to require the same room as well, on the reasoning that a first
+ * aid kit in the store and another in the minibus are two real things and
+ * flagging them would train people to ignore this list. That reasoning was
+ * right when merging forced the result into one room — it would have thrown
+ * away where half the kit was.
+ *
+ * Placements changed it. One row can now be in the store AND the minibus
+ * with a count for each, so merging keeps everything and the duplicate rows
+ * were only ever a workaround for the model that could not express it. Three
+ * rows called "Tents" in three rooms is one kind of tent in three rooms.
  */
 export function findDuplicates(equipment: Equipment[]): DuplicateFinding[] {
   const groups = new Map<string, Equipment[]>();
 
   for (const item of equipment) {
-    const key = `${norm(item.name)}@@${norm(item.location)}`;
+    const key = norm(item.name);
     const bucket = groups.get(key);
     if (bucket) bucket.push(item);
     else groups.set(key, [item]);
@@ -86,7 +94,7 @@ export function findDuplicates(equipment: Equipment[]): DuplicateFinding[] {
       kind: "duplicate",
       itemIds: rows.map((r) => r.id),
       name: rows[0].name,
-      location: rows[0].location,
+      locations: [...new Set(rows.map((r) => r.location).filter(Boolean))],
     });
   }
   return findings.sort((a, b) => a.name.localeCompare(b.name));
@@ -293,7 +301,12 @@ export function verifyItemFindings(
 /** A short, plain description of what applying a finding would do. */
 export function describeFix(finding: Finding): string {
   if (finding.kind === "duplicate") {
-    return `Merge ${finding.itemIds.length} rows into one, adding their quantities together.`;
+    const where =
+      finding.locations.length > 1 ? ` across ${finding.locations.join(", ")}` : "";
+    return (
+      `Merge ${finding.itemIds.length} rows${where} into one. Quantities add up, ` +
+      "and every room and box each row was in is kept."
+    );
   }
   if (finding.kind === "item-variants") {
     const names = finding.variants.map((v) => `"${v.name}"`).join(", ");

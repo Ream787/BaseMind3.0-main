@@ -2,7 +2,6 @@ import { Box, ChevronRight, DoorOpen, Tags } from "lucide-react";
 
 import type { Equipment } from "@/types/database";
 import { groupEquipment, type EquipmentGroup, type GroupBy } from "@/lib/groupEquipment";
-import { Badge } from "@/components/ui/badge";
 
 interface EquipmentGroupGridProps {
   items: Equipment[];
@@ -72,14 +71,6 @@ export function EquipmentGroupGrid({
             </span>
             <span aria-hidden>·</span>
             <span>{group.totalQuantity} total</span>
-            {group.needsAttention > 0 && (
-              <Badge
-                variant="outline"
-                className="border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
-              >
-                {group.needsAttention} needs attention
-              </Badge>
-            )}
           </div>
         </button>
       ))}

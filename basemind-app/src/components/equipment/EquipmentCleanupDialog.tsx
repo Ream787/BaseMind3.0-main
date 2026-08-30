@@ -235,7 +235,7 @@ export function EquipmentCleanupDialog({
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">
                       {isDuplicate
-                        ? `"${finding.name}" is listed ${finding.itemIds.length} times in ${finding.location}`
+                        ? `"${finding.name}" is listed as ${finding.itemIds.length} separate rows`
                         : isNameMerge
                           ? `"${finding.canonical}" is listed under ${
                               finding.variants.length + 1

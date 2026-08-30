@@ -82,7 +82,28 @@ export function RepairsPage() {
   );
 
   const open = useMemo(() => faults.filter((f) => !f.resolved_on), [faults]);
+
+  /**
+   * Kit whose condition says it is not serviceable, with no fault recorded.
+   *
+   * These are the ones that fell between the two records: somebody marked an
+   * axe Broken on the inventory and nothing appeared here, so the axe was
+   * both broken and, as far as this page was concerned, fine. Listing them
+   * with a one-tap way to write the fault down closes that gap.
+   */
+  const unrecorded = useMemo(() => {
+    const hasOpenFault = new Set(open.map((f) => f.equipment_id));
+    return equipment.filter(
+      (item) => item.condition !== "Good" && !hasOpenFault.has(item.id),
+    );
+  }, [equipment, open]);
   const resolved = useMemo(() => faults.filter((f) => f.resolved_on), [faults]);
+
+  /** Opens the report form with this item already chosen. */
+  function reportFor(equipmentId: string, description = "") {
+    setForm({ equipment_id: equipmentId, description, broke_on: "", quantity: "1", plan: "Undecided" });
+    setReporting(true);
+  }
 
   async function report(e: FormEvent) {
     e.preventDefault();
@@ -210,9 +231,10 @@ export function RepairsPage() {
         <div>
           <h1>Repairs</h1>
           <p className="text-sm text-muted-foreground">
-            {open.length === 0
+            {open.length === 0 && unrecorded.length === 0
               ? "Nothing broken is waiting on a decision."
-              : `${open.length} open ${open.length === 1 ? "fault" : "faults"}`}
+              : `${open.length} open ${open.length === 1 ? "fault" : "faults"}` +
+                (unrecorded.length > 0 ? ` · ${unrecorded.length} unrecorded` : "")}
           </p>
         </div>
         {canEdit && (
@@ -226,6 +248,37 @@ export function RepairsPage() {
           </Button>
         )}
       </div>
+
+      {unrecorded.length > 0 && (
+        <section className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950">
+          <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+            {unrecorded.length} {unrecorded.length === 1 ? "item is" : "items are"} marked
+            as not in good condition, with nothing written down about why
+          </p>
+          <ul className="flex flex-col gap-1">
+            {unrecorded.map((item) => (
+              <li
+                key={item.id}
+                className="flex flex-wrap items-center justify-between gap-2 text-sm"
+              >
+                <span className="text-amber-900 dark:text-amber-200">
+                  {item.name} · {item.condition}
+                </span>
+                {canEdit && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={blocked !== null}
+                    onClick={() => reportFor(item.id)}
+                  >
+                    Write it down
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>

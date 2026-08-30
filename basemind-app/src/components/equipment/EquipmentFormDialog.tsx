@@ -41,6 +41,7 @@ interface FormState {
   date_last_checked: string;
   next_check_date: string;
   checked_by: string;
+  label_colour: string;
 }
 
 const emptyForm: FormState = {
@@ -53,6 +54,7 @@ const emptyForm: FormState = {
   date_last_checked: "",
   next_check_date: "",
   checked_by: "",
+  label_colour: "",
 };
 
 function toFormState(equipment: Equipment): FormState {
@@ -66,11 +68,30 @@ function toFormState(equipment: Equipment): FormState {
     date_last_checked: equipment.date_last_checked ?? "",
     next_check_date: equipment.next_check_date ?? "",
     checked_by: equipment.checked_by ?? "",
+    label_colour: equipment.label_colour ?? "",
   };
 }
 
-/** Sentinel for the "somewhere new" choice in the room dropdown. */
+/** Sentinels for the "something new" choices in the dropdowns. */
 const NEW_ROOM = "__new_room";
+const NEW_CATEGORY = "__new_category";
+const NO_BAND = "__no_band";
+
+/** The colours the swatch can actually draw, plus room for another. */
+const BAND_COLOURS = [
+  "red",
+  "blue",
+  "green",
+  "yellow",
+  "orange",
+  "pink",
+  "purple",
+  "brown",
+  "black",
+  "white",
+  "grey",
+  "yellow&green",
+];
 
 interface EquipmentFormDialogProps {
   open: boolean;
@@ -106,6 +127,7 @@ export function EquipmentFormDialog({
 
   // True while typing a room that doesn't exist yet.
   const [newRoom, setNewRoom] = useState(false);
+  const [newCategory, setNewCategory] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -115,6 +137,7 @@ export function EquipmentFormDialog({
       setForm(start);
       setInitial(start);
       setNewRoom(false);
+      setNewCategory(false);
     }
   }, [open, equipment, defaultLocation]);
 
@@ -138,6 +161,7 @@ export function EquipmentFormDialog({
       date_last_checked: form.date_last_checked || null,
       next_check_date: form.next_check_date || null,
       checked_by: form.checked_by || null,
+      label_colour: form.label_colour.trim() || null,
     };
 
     try {
@@ -203,17 +227,55 @@ export function EquipmentFormDialog({
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="eq-category">Category</Label>
-              <Input
-                id="eq-category"
-                list="eq-category-options"
-                value={form.category}
-                onChange={(e) => set("category", e.target.value)}
-              />
-              <datalist id="eq-category-options">
-                {categories.map((c) => (
-                  <option key={c} value={c} />
-                ))}
-              </datalist>
+              {/* A list, like the room. Typing it freehand is how "Camping",
+                  "camping" and "Campng" all end up as separate headings. */}
+              {newCategory || categories.length === 0 ? (
+                <div className="flex gap-2">
+                  <Input
+                    id="eq-category"
+                    autoFocus={newCategory}
+                    placeholder="New category"
+                    value={form.category}
+                    onChange={(e) => set("category", e.target.value)}
+                  />
+                  {categories.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setNewCategory(false);
+                        set("category", "");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <Select
+                  value={form.category || undefined}
+                  onValueChange={(v) => {
+                    if (v === NEW_CATEGORY) {
+                      setNewCategory(true);
+                      set("category", "");
+                    } else {
+                      set("category", v);
+                    }
+                  }}
+                >
+                  <SelectTrigger id="eq-category">
+                    <SelectValue placeholder="Pick a category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={NEW_CATEGORY}>+ Something new…</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="eq-quantity">Quantity</Label>
@@ -280,6 +342,28 @@ export function EquipmentFormDialog({
                   </SelectContent>
                 </Select>
               )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Colour band</Label>
+              {/* The whole point of the band scheme, and there was no way to
+                  set one: label_colour has been stored since the DELP import
+                  and only that import ever filled it in. */}
+              <Select
+                value={form.label_colour || NO_BAND}
+                onValueChange={(v) => set("label_colour", v === NO_BAND ? "" : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_BAND}>No band</SelectItem>
+                  {BAND_COLOURS.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex flex-col gap-2">
               <Label>Condition</Label>

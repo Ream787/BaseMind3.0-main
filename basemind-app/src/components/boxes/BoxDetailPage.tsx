@@ -227,16 +227,19 @@ export function BoxDetailPage() {
     if (!box) return;
     setAdding(true);
     try {
+      // p_add: putting three in a box that holds two means five, not three.
+      // Setting it outright is what the number beside a row does.
       const { error } = await supabase.rpc("place_equipment", {
         p_equipment_id: item.id,
         p_box_id: box.id,
         p_location: null,
         p_quantity: quantity,
+        p_add: true,
       });
       if (error) throw new Error(error.message);
       setNewItem("");
       setNewQuantity("1");
-      toast.success(`${quantity} × ${item.name} in ${box.name}`);
+      toast.success(`${quantity} × ${item.name} added to ${box.name}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't add that.");
     } finally {

@@ -449,6 +449,8 @@ export type Database = {
           p_box_id: string | null;
           p_location: string | null;
           p_quantity: number;
+          /** true adds to what is there; false (default) sets it outright. */
+          p_add?: boolean;
         };
         Returns: void;
       };
