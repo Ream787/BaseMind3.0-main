@@ -79,13 +79,21 @@ export function PoliciesPage() {
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [sorting, setSorting] = useState(false);
   const [bulk, setBulk] = useState<{ done: number; total: number } | null>(null);
-  // Which shelves are folded shut. Empty means everything is open, so a
-  // first visit shows the documents rather than a row of closed drawers.
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  /**
+   * Which groups are open. Empty by default, so they all start folded and
+   * eighty documents read as seven headings instead of a very long page.
+   *
+   * Tracked as "open" rather than "shut" deliberately: a group that appears
+   * later — a new one the AI files something into — is then closed like the
+   * rest, rather than being the one thing hanging open.
+   */
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   // Adding a policy changes what the assistant tells everyone, so it's held
   // to Manager and above — the same bar as the database enforces.
   const canManage = hasRole(["Admin", "Manager"]);
+
+  const searching = search.trim().length > 0;
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -506,13 +514,16 @@ export function PoliciesPage() {
         ) : (
           <div className="flex flex-col gap-5">
             {groupPolicies(filtered).map((group) => {
-              const shut = collapsed.has(group.category);
+              // A search that matched something inside a folded group has to
+              // show it. Hiding results behind a closed heading looks exactly
+              // like the search being broken.
+              const shut = !searching && !expanded.has(group.category);
               return (
               <section key={group.category} className="flex flex-col gap-2">
                 <button
                   type="button"
                   onClick={() =>
-                    setCollapsed((prev) => {
+                    setExpanded((prev) => {
                       const next = new Set(prev);
                       if (next.has(group.category)) next.delete(group.category);
                       else next.add(group.category);
