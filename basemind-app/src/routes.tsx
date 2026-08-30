@@ -21,6 +21,9 @@ const EquipmentPage = lazy(() =>
 const BoxDetailPage = lazy(() =>
   import("@/components/boxes/BoxDetailPage").then((m) => ({ default: m.BoxDetailPage })),
 );
+const RepairsPage = lazy(() =>
+  import("@/components/equipment/RepairsPage").then((m) => ({ default: m.RepairsPage })),
+);
 const LoansPage = lazy(() =>
   import("@/components/loans/LoansPage").then((m) => ({ default: m.LoansPage })),
 );
@@ -119,6 +122,16 @@ export const router = createBrowserRouter([
           <Gate feature="equipment">
             <EquipmentProvider>
               <BoxDetailPage />
+            </EquipmentProvider>
+          </Gate>
+        ),
+      },
+      {
+        path: "repairs",
+        element: (
+          <Gate feature="equipment">
+            <EquipmentProvider>
+              <RepairsPage />
             </EquipmentProvider>
           </Gate>
         ),

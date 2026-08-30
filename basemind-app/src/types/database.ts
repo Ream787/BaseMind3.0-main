@@ -225,6 +225,57 @@ export type MazeRun = {
 
 export type NewMazeRun = Omit<MazeRun, "id" | "completed_at">;
 
+/** One recorded look at a piece of kit, and what was said about it. */
+export type EquipmentCheck = {
+  id: string;
+  equipment_id: string;
+  checked_by: string | null;
+  checked_on: string;
+  note: string | null;
+  condition: string | null;
+  created_at: string;
+};
+
+export type NewEquipmentCheck = Omit<EquipmentCheck, "id" | "created_at" | "checked_on"> &
+  Partial<Pick<EquipmentCheck, "checked_on">>;
+
+export type FaultPlan = "Undecided" | "Repair" | "Retire";
+
+/** Something broken: when, what happened, and what is going to be done. */
+export type EquipmentFault = {
+  id: string;
+  equipment_id: string;
+  broke_on: string | null;
+  reported_on: string;
+  reported_by: string | null;
+  description: string;
+  quantity: number;
+  plan: FaultPlan;
+  notes: string | null;
+  /** Null while it is still open. */
+  resolved_on: string | null;
+  resolution: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NewEquipmentFault = Omit<
+  EquipmentFault,
+  "id" | "created_at" | "updated_at" | "reported_on" | "quantity" | "plan" | "notes"
+  | "resolved_on" | "resolution"
+> &
+  Partial<
+    Pick<
+      EquipmentFault,
+      "reported_on" | "quantity" | "plan" | "notes" | "resolved_on" | "resolution"
+    >
+  >;
+
+export type EquipmentFaultUpdate = Partial<
+  Pick<EquipmentFault, "description" | "broke_on" | "quantity" | "plan" | "notes"
+  | "resolved_on" | "resolution">
+>;
+
 export type FeatureKey =
   | "equipment"
   | "loans"
@@ -364,6 +415,8 @@ export type Database = {
       equipment: TableDef<Equipment, NewEquipment, EquipmentUpdate>;
       equipment_boxes: TableDef<EquipmentBox, NewEquipmentBox, EquipmentBoxUpdate>;
       equipment_placements: TableDef<EquipmentPlacement, NewEquipmentPlacement>;
+      equipment_checks: TableDef<EquipmentCheck, NewEquipmentCheck>;
+      equipment_faults: TableDef<EquipmentFault, NewEquipmentFault, EquipmentFaultUpdate>;
       maze_runs: TableDef<MazeRun, NewMazeRun>;
       equipment_loans: TableDef<EquipmentLoan, NewEquipmentLoan>;
       camping_sites: TableDef<CampingSite, NewCampingSite>;

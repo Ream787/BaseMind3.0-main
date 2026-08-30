@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Box, ChevronRight, Plus, QrCode, Search, Sparkles } from "lucide-react";
+import { ArrowLeft, Box, ChevronRight, Palette, Plus, QrCode, Search, Sparkles } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router";
-import { addMonths, format } from "date-fns";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
@@ -32,6 +31,8 @@ import { EquipmentTable } from "@/components/equipment/EquipmentTable";
 import { EquipmentFormDialog } from "@/components/equipment/EquipmentFormDialog";
 import { EquipmentGroupGrid } from "@/components/equipment/EquipmentGroupGrid";
 import { EquipmentCleanupDialog } from "@/components/equipment/EquipmentCleanupDialog";
+import { CheckDialog } from "@/components/equipment/CheckDialog";
+import { ColourIndexDialog } from "@/components/equipment/ColourIndexDialog";
 import { QrScannerDialog } from "@/components/boxes/QrScannerDialog";
 import { generateBoxCode } from "@/lib/boxes";
 import {
@@ -72,10 +73,11 @@ export function EquipmentPage() {
   const navigate = useNavigate();
   const { hasRole, profile } = useAuth();
   const { online } = useOffline();
-  const { equipment, loading, error, updateEquipment } = useEquipment();
-  const [checkingId, setCheckingId] = useState<string | null>(null);
+  const { equipment, loading, error } = useEquipment();
+  const [checking, setChecking] = useState<Equipment | null>(null);
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [coloursOpen, setColoursOpen] = useState(false);
 
   const [users, setUsers] = useState<UserOption[]>([]);
   const [search, setSearch] = useState("");
@@ -126,6 +128,10 @@ export function EquipmentPage() {
   // sits with deleting rather than with editing: a Member can correct the
   // item in front of them, not restructure everyone else's list.
   const canTidy = hasRole(["Admin", "Manager"]);
+  const anyBanded = useMemo(
+    () => equipment.some((item) => item.label_colour?.trim()),
+    [equipment],
+  );
 
   /**
    * Why the write controls are shut, if they are.
@@ -304,31 +310,6 @@ export function EquipmentPage() {
   }
 
   /**
-   * Records that this item was looked at today, by whoever is signed in, and
-   * schedules the next look for six months' time.
-   *
-   * A button rather than the edit form on purpose: checking kit happens with
-   * the kit in your hands, and typing three fields on a phone in a store room
-   * is how a check ends up not being recorded at all.
-   */
-  async function markChecked(item: Equipment) {
-    setCheckingId(item.id);
-    const today = new Date();
-    try {
-      await updateEquipment(item.id, {
-        date_last_checked: format(today, "yyyy-MM-dd"),
-        next_check_date: format(addMonths(today, 6), "yyyy-MM-dd"),
-        checked_by: profile?.id ?? null,
-      });
-      toast.success(`${item.name} checked — next check ${format(addMonths(today, 6), "d MMM yyyy")}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't record that check.");
-    } finally {
-      setCheckingId(null);
-    }
-  }
-
-  /**
    * A scanned sticker always lands somewhere useful. An unknown one creates
    * its box: the person is holding a real sticker on a real box, and telling
    * them "not found" would mean walking away to add it and coming back.
@@ -349,7 +330,6 @@ export function EquipmentPage() {
       .insert({
         code,
         created_by: profile?.id ?? null,
-        // Straight into the room being looked at, when there is one.
         ...(view === "location" && openGroup ? { location: openGroup.name } : {}),
       })
       .select()
@@ -433,6 +413,17 @@ export function EquipmentPage() {
             >
               <Plus className="size-4" />
               Add item
+            </Button>
+          )}
+          {anyBanded && (
+            <Button
+              variant="outline"
+              className="flex-1 sm:flex-none"
+              onClick={() => setColoursOpen(true)}
+              title="What the coloured bands mean"
+            >
+              <Palette className="size-4" />
+              Bands
             </Button>
           )}
           {canTidy && (
@@ -575,13 +566,21 @@ export function EquipmentPage() {
             onEdit={openEditDialog}
             onDelete={setDeleteTarget}
             onLend={openLendDialog}
-            onCheck={markChecked}
-            checkingId={checkingId}
+            onCheck={setChecking}
+            checkingId={checking?.id ?? null}
             writesBlocked={blocked}
             placementSummary={placementSummary}
           />
         </>
       )}
+
+      <ColourIndexDialog
+        open={coloursOpen}
+        onOpenChange={setColoursOpen}
+        equipment={equipment}
+      />
+
+      <CheckDialog item={checking} onOpenChange={(open) => !open && setChecking(null)} />
 
       <QrScannerDialog open={scanning} onOpenChange={setScanning} onFound={openScanned} />
 

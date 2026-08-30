@@ -4,6 +4,7 @@ import { ClipboardCheck, HandCoins, Pencil, Trash2 } from "lucide-react";
 import type { Equipment, EquipmentCondition, EquipmentLoan } from "@/types/database";
 import { availableQuantity, onLoanQuantity } from "@/lib/loans";
 import { Badge } from "@/components/ui/badge";
+import { ColourSwatch } from "@/components/equipment/ColourSwatch";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/utils";
 import {
@@ -98,7 +99,10 @@ export function EquipmentTable({
             <li key={item.id} className="rounded-lg border bg-card p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 flex-col">
-                  <span className="font-medium">{item.name}</span>
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <ColourSwatch label={item.label_colour} />
+                    {item.name}
+                  </span>
                   {item.category && (
                     <span className="text-xs text-muted-foreground">{item.category}</span>
                   )}
@@ -200,7 +204,12 @@ export function EquipmentTable({
               const available = availableQuantity(item, loans);
               return (
                 <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <span className="flex items-center gap-1.5">
+                      <ColourSwatch label={item.label_colour} />
+                      {item.name}
+                    </span>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{item.category || "—"}</TableCell>
                   <TableCell>{item.quantity}</TableCell>
                   <TableCell>
