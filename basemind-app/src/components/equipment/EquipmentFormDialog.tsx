@@ -6,6 +6,7 @@ import { useEquipment } from "@/context/EquipmentContext";
 import type { Equipment, EquipmentCondition } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SearchSelect } from "@/components/ui/search-select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -72,9 +73,7 @@ function toFormState(equipment: Equipment): FormState {
   };
 }
 
-/** Sentinels for the "something new" choices in the dropdowns. */
-const NEW_ROOM = "__new_room";
-const NEW_CATEGORY = "__new_category";
+/** Sentinel for "no colour band on this one". */
 const NO_BAND = "__no_band";
 
 /** The colours the swatch can actually draw, plus room for another. */
@@ -126,8 +125,6 @@ export function EquipmentFormDialog({
   const [submitting, setSubmitting] = useState(false);
 
   // True while typing a room that doesn't exist yet.
-  const [newRoom, setNewRoom] = useState(false);
-  const [newCategory, setNewCategory] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -136,8 +133,6 @@ export function EquipmentFormDialog({
         : { ...emptyForm, location: defaultLocation ?? "" };
       setForm(start);
       setInitial(start);
-      setNewRoom(false);
-      setNewCategory(false);
     }
   }, [open, equipment, defaultLocation]);
 
@@ -227,55 +222,19 @@ export function EquipmentFormDialog({
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="eq-category">Category</Label>
-              {/* A list, like the room. Typing it freehand is how "Camping",
-                  "camping" and "Campng" all end up as separate headings. */}
-              {newCategory || categories.length === 0 ? (
-                <div className="flex gap-2">
-                  <Input
-                    id="eq-category"
-                    autoFocus={newCategory}
-                    placeholder="New category"
-                    value={form.category}
-                    onChange={(e) => set("category", e.target.value)}
-                  />
-                  {categories.length > 0 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setNewCategory(false);
-                        set("category", "");
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <Select
-                  value={form.category || undefined}
-                  onValueChange={(v) => {
-                    if (v === NEW_CATEGORY) {
-                      setNewCategory(true);
-                      set("category", "");
-                    } else {
-                      set("category", v);
-                    }
-                  }}
-                >
-                  <SelectTrigger id="eq-category">
-                    <SelectValue placeholder="Pick a category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value={NEW_CATEGORY}>+ Something new…</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
+              {/* Type to filter, and type something new to create it. The
+                  two-state "dropdown or a text box with a Cancel button" this
+                  replaces was a worse version of the same idea. */}
+              <SearchSelect
+                id="eq-category"
+                value={form.category || null}
+                onChange={(v) => set("category", v)}
+                onCreate={(v) => set("category", v)}
+                createLabel="New category"
+                placeholder="Pick a category"
+                searchPlaceholder="Search or type a new one…"
+                options={categories.map((c) => ({ value: c, label: c }))}
+              />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="eq-quantity">Quantity</Label>
@@ -290,58 +249,16 @@ export function EquipmentFormDialog({
             </div>
             <div className="flex flex-col gap-2 sm:col-span-2">
               <Label htmlFor="eq-location">Room</Label>
-              {/* A list of the rooms that exist, rather than a free text box.
-                  Typing the room every time is how "Store Room", "store room"
-                  and "Strore Room" all end up in the same inventory. Adding a
-                  genuinely new one is still one tap away. */}
-              {newRoom || locations.length === 0 ? (
-                <div className="flex gap-2">
-                  <Input
-                    id="eq-location"
-                    required
-                    autoFocus={newRoom}
-                    placeholder="New room name"
-                    value={form.location}
-                    onChange={(e) => set("location", e.target.value)}
-                  />
-                  {locations.length > 0 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setNewRoom(false);
-                        set("location", defaultLocation ?? locations[0]);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <Select
-                  value={form.location || undefined}
-                  onValueChange={(v) => {
-                    if (v === NEW_ROOM) {
-                      setNewRoom(true);
-                      set("location", "");
-                    } else {
-                      set("location", v);
-                    }
-                  }}
-                >
-                  <SelectTrigger id="eq-location">
-                    <SelectValue placeholder="Pick a room" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {locations.map((l) => (
-                      <SelectItem key={l} value={l}>
-                        {l}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value={NEW_ROOM}>+ Somewhere new…</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
+              <SearchSelect
+                id="eq-location"
+                value={form.location || null}
+                onChange={(v) => set("location", v)}
+                onCreate={(v) => set("location", v)}
+                createLabel="New room"
+                placeholder="Pick a room"
+                searchPlaceholder="Search or type a new one…"
+                options={locations.map((l) => ({ value: l, label: l }))}
+              />
             </div>
             <div className="flex flex-col gap-2">
               <Label>Colour band</Label>

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { SearchSelect } from "@/components/ui/search-select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -324,21 +325,18 @@ export function RepairsPage() {
           <form onSubmit={report} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <Label>Item</Label>
-              <Select
-                value={form.equipment_id || undefined}
-                onValueChange={(v) => setForm({ ...form, equipment_id: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pick an item" />
-                </SelectTrigger>
-                <SelectContent>
-                  {equipment.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchSelect
+                value={form.equipment_id || null}
+                onChange={(v) => setForm({ ...form, equipment_id: v })}
+                placeholder="Pick an item"
+                searchPlaceholder="Search the inventory…"
+                emptyText="Nothing by that name"
+                options={equipment.map((item) => ({
+                  value: item.id,
+                  label: item.name,
+                  hint: item.condition === "Good" ? undefined : item.condition,
+                }))}
+              />
             </div>
 
             <div className="flex flex-col gap-2">

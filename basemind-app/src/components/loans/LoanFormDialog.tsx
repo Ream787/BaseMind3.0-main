@@ -5,16 +5,11 @@ import { supabase } from "@/lib/supabase/client";
 import { availableQuantity, todayISO } from "@/lib/loans";
 import type { Equipment, EquipmentLoan } from "@/types/database";
 import { Button } from "@/components/ui/button";
+import { Plus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { SearchSelect } from "@/components/ui/search-select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -35,9 +30,18 @@ const POSITION_SUGGESTIONS = [
   "Parent",
 ];
 
+/** One line of the loan: a thing, and how many of it. */
+export type LoanLine = { equipment_id: string; quantity: string };
+
 type FormState = {
-  equipment_id: string;
-  quantity: string;
+  /**
+   * What is going out. A loan row in the database is still one item, but a
+   * person borrowing four things is one conversation, not four — so the form
+   * takes a basket and writes a row for each.
+   *
+   * Editing works on a single existing row, so the basket holds exactly one.
+   */
+  lines: LoanLine[];
   borrower_name: string;
   scout_group: string;
   position: string;
@@ -50,8 +54,7 @@ type FormState = {
 
 function emptyForm(equipmentId = ""): FormState {
   return {
-    equipment_id: equipmentId,
-    quantity: "1",
+    lines: [{ equipment_id: equipmentId, quantity: "1" }],
     borrower_name: "",
     scout_group: "",
     position: "",
@@ -96,8 +99,9 @@ export function LoanFormDialog({
     const start: FormState =
       editing
         ? {
-            equipment_id: editing.equipment_id,
-            quantity: String(editing.quantity),
+            lines: [
+              { equipment_id: editing.equipment_id, quantity: String(editing.quantity) },
+            ],
             borrower_name: editing.borrower_name,
             scout_group: editing.scout_group ?? "",
             position: editing.position ?? "",
@@ -120,13 +124,38 @@ export function LoanFormDialog({
     [loans],
   );
 
-  const selectedItem = equipment.find((e) => e.id === form.equipment_id) ?? null;
+  /**
+   * How many of an item could go out right now.
+   *
+   * When editing, this loan's own units are already counted as out, so they
+   * are added back — otherwise the form refuses a quantity it accepted five
+   * minutes ago.
+   */
+  function freeCount(item: Equipment): number {
+    return (
+      availableQuantity(item, loans) +
+      (editing && !editing.returned_on && editing.equipment_id === item.id
+        ? editing.quantity
+        : 0)
+    );
+  }
 
-  // When editing, this loan's own units are already counted as out, so add
-  // them back to avoid the form refusing a quantity it previously allowed.
-  const available = selectedItem
-    ? availableQuantity(selectedItem, loans) + (editing && !editing.returned_on ? editing.quantity : 0)
-    : 0;
+  const chosen = new Set(form.lines.map((l) => l.equipment_id).filter(Boolean));
+
+  function setLine(index: number, patch: Partial<LoanLine>) {
+    setForm((prev) => ({
+      ...prev,
+      lines: prev.lines.map((l, i) => (i === index ? { ...l, ...patch } : l)),
+    }));
+  }
+
+  function addLine() {
+    setForm((prev) => ({ ...prev, lines: [...prev.lines, { equipment_id: "", quantity: "1" }] }));
+  }
+
+  function removeLine(index: number) {
+    setForm((prev) => ({ ...prev, lines: prev.lines.filter((_, i) => i !== index) }));
+  }
 
   /**
    * Just sets the name.
@@ -143,29 +172,41 @@ export function LoanFormDialog({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
-    const quantity = Number(form.quantity) || 0;
-    if (quantity < 1) {
-      setFormError("Quantity must be at least 1.");
+    const lines = form.lines.filter((l) => l.equipment_id);
+    if (lines.length === 0) {
+      setFormError("Choose at least one thing to lend.");
       return;
     }
-    if (selectedItem && quantity > available) {
-      setFormError(
-        `Only ${available} of ${selectedItem.quantity} ${selectedItem.name} ${
-          available === 1 ? "is" : "are"
-        } available — the rest are already out.`,
-      );
-      return;
+
+    // Everything is checked before anything is written. Half a loan saved,
+    // with the other half refused, is worse than a clear refusal.
+    for (const line of lines) {
+      const item = equipment.find((e) => e.id === line.equipment_id);
+      const quantity = Number(line.quantity) || 0;
+      if (!item) continue;
+      if (quantity < 1) {
+        setFormError(`How many ${item.name}? It needs to be at least 1.`);
+        return;
+      }
+      const free = freeCount(item);
+      if (quantity > free) {
+        setFormError(
+          `Only ${free} of ${item.quantity} ${item.name} ${
+            free === 1 ? "is" : "are"
+          } available — the rest are already out.`,
+        );
+        return;
+      }
     }
     if (form.due_back && form.due_back < form.borrowed_on) {
       setFormError("The return date can't be before the borrow date.");
       return;
     }
+
     setFormError(null);
     setSubmitting(true);
 
-    const payload = {
-      equipment_id: form.equipment_id,
-      quantity,
+    const shared = {
       borrower_name: form.borrower_name.trim(),
       scout_group: form.scout_group.trim() || null,
       position: form.position.trim() || null,
@@ -174,12 +215,29 @@ export function LoanFormDialog({
       borrowed_on: form.borrowed_on,
       due_back: form.due_back || null,
       notes: form.notes.trim() || null,
-      returned_on: editing?.returned_on ?? null,
     };
 
+    // A loan row is still one item. Several things going out together are
+    // several rows sharing a borrower, which keeps returning one of them
+    // independent of the rest.
     const { error } = editing
-      ? await supabase.from("equipment_loans").update(payload).eq("id", editing.id)
-      : await supabase.from("equipment_loans").insert(payload);
+      ? await supabase
+          .from("equipment_loans")
+          .update({
+            ...shared,
+            equipment_id: lines[0].equipment_id,
+            quantity: Number(lines[0].quantity) || 1,
+            returned_on: editing.returned_on ?? null,
+          })
+          .eq("id", editing.id)
+      : await supabase.from("equipment_loans").insert(
+          lines.map((line) => ({
+            ...shared,
+            equipment_id: line.equipment_id,
+            quantity: Number(line.quantity) || 1,
+            returned_on: null,
+          })),
+        );
 
     setSubmitting(false);
     if (error) {
@@ -187,7 +245,11 @@ export function LoanFormDialog({
       return;
     }
     toast.success(
-      editing ? "Loan updated" : `${payload.borrower_name} has ${selectedItem?.name ?? "the item"}`,
+      editing
+        ? "Loan updated"
+        : `${shared.borrower_name} has ${lines.length} ${
+            lines.length === 1 ? "thing" : "things"
+          }`,
     );
     onOpenChange(false);
   }
@@ -211,46 +273,85 @@ export function LoanFormDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="grid grid-cols-[1fr_6rem] gap-4">
-            <div className="flex flex-col gap-2">
-              <Label>Item</Label>
-              <Select
-                value={form.equipment_id}
-                onValueChange={(v) => setForm({ ...form, equipment_id: v })}
+          <div className="flex flex-col gap-2">
+            <Label>{editing ? "Item" : "What's going out"}</Label>
+
+            {form.lines.map((line, index) => {
+              const item = equipment.find((e) => e.id === line.equipment_id) ?? null;
+              const free = item ? freeCount(item) : 0;
+              return (
+                <div key={index} className="flex flex-col gap-1">
+                  <div className="flex gap-2">
+                    {/* Searchable: a Select is unusable once the inventory is
+                        a couple of hundred rows and you are standing in the
+                        store trying to find one of them. */}
+                    <SearchSelect
+                      className="flex-1"
+                      value={line.equipment_id || null}
+                      onChange={(v) => setLine(index, { equipment_id: v })}
+                      placeholder="Choose equipment…"
+                      searchPlaceholder="Search the inventory…"
+                      emptyText="Nothing by that name"
+                      options={equipment.map((e) => {
+                        const n = freeCount(e);
+                        return {
+                          value: e.id,
+                          label: e.name,
+                          hint: n === 0 ? "all out" : `${n} free`,
+                          // Already in this basket, or nothing left to lend.
+                          disabled:
+                            (n === 0 && !editing) ||
+                            (e.id !== line.equipment_id && chosen.has(e.id)),
+                        };
+                      })}
+                    />
+                    <Input
+                      type="number"
+                      min={1}
+                      max={free || undefined}
+                      aria-label="How many"
+                      className="w-20"
+                      required
+                      value={line.quantity}
+                      onChange={(e) => setLine(index, { quantity: e.target.value })}
+                    />
+                    {form.lines.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Remove this item"
+                        onClick={() => removeLine(index)}
+                      >
+                        <X className="size-4" />
+                      </Button>
+                    )}
+                  </div>
+                  {item && (
+                    <p className="text-xs text-muted-foreground">
+                      {free} of {item.quantity} available · kept in {item.location}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* One borrower, several things: lending a tent, a stove and four
+                staves is one conversation, and making it four trips through
+                this form is how the last two never get recorded. */}
+            {!editing && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="self-start"
+                onClick={addLine}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose equipment…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {equipment.map((item) => {
-                    const free = availableQuantity(item, loans);
-                    return (
-                      <SelectItem key={item.id} value={item.id} disabled={free === 0 && !editing}>
-                        {item.name} — {free} of {item.quantity} free
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="loan-qty">Quantity</Label>
-              <Input
-                id="loan-qty"
-                type="number"
-                min={1}
-                max={available || undefined}
-                required
-                value={form.quantity}
-                onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-              />
-            </div>
+                <Plus className="size-4" />
+                Something else
+              </Button>
+            )}
           </div>
-          {selectedItem && (
-            <p className="-mt-2 text-xs text-muted-foreground">
-              {available} of {selectedItem.quantity} available · kept in {selectedItem.location}
-            </p>
-          )}
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="loan-borrower">Borrower</Label>
@@ -361,7 +462,10 @@ export function LoanFormDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={submitting || !form.equipment_id}>
+            <Button
+              type="submit"
+              disabled={submitting || !form.lines.some((l) => l.equipment_id)}
+            >
               {submitting ? "Saving…" : editing ? "Save changes" : "Lend it"}
             </Button>
           </DialogFooter>
