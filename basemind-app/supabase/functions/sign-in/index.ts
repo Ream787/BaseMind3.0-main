@@ -62,7 +62,21 @@ Deno.serve(async (req: Request) => {
       `${supabaseUrl}/rest/v1/users?select=email&username=eq.${encodeURIComponent(handle)}&limit=1`,
       { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
     );
-    if (!lookup.ok) return json({ error: GENERIC_FAILURE }, 401);
+
+    // A broken lookup is NOT a failed sign-in, and must not be reported as
+    // one. Returning the generic message here made a misconfigured function
+    // indistinguishable from a wrong username, which is exactly the state
+    // nobody can debug. This says nothing about any account, so it is safe
+    // to be specific about.
+    if (!lookup.ok) {
+      return json(
+        {
+          error: "Sign-in by username is misconfigured — an admin needs to look at it.",
+          detail: `Looking up the username returned ${lookup.status}: ${(await lookup.text()).slice(0, 200)}`,
+        },
+        500,
+      );
+    }
 
     const rows = (await lookup.json()) as { email?: string }[];
     const email = rows[0]?.email;
