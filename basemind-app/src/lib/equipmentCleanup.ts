@@ -59,7 +59,49 @@ export type ItemVariantFinding = {
   why: string;
 };
 
-export type Finding = DuplicateFinding | VariantFinding | ItemVariantFinding;
+/**
+ * One value spelled wrongly, or written against the house style.
+ *
+ * Different from a variant finding in the one way that matters: the
+ * replacement does NOT already exist in the data. That is the whole point —
+ * "malet" with no "Mallet" to merge into, or "rope 2m" in a list where
+ * everything else is written "Rope, 2m" — and it is also what makes it the
+ * riskiest thing here to accept from a model, so the checks below are about
+ * what a rename may not do rather than what it may.
+ *
+ * Renames are reversible, unlike merges: the old spelling can be typed back.
+ * That is why they get a lighter confirmation than merging two rows.
+ */
+export type RenameFinding = {
+  kind: "item-rename" | "location-rename" | "category-rename";
+  from: string;
+  to: string;
+  /** How many rows would be touched. */
+  affected: number;
+  why: string;
+};
+
+export type Finding =
+  | DuplicateFinding
+  | VariantFinding
+  | ItemVariantFinding
+  | RenameFinding;
+
+/**
+ * A spelling fix rather than a merge.
+ *
+ * A written-out guard rather than three comparisons at each call site: the
+ * kinds share a shape, every screen that shows a finding has to tell them
+ * apart, and this narrows the type in both directions where a chain of ORs
+ * over a multi-valued discriminant does not.
+ */
+export function isRename(finding: Finding): finding is RenameFinding {
+  return (
+    finding.kind === "item-rename" ||
+    finding.kind === "location-rename" ||
+    finding.kind === "category-rename"
+  );
+}
 
 const norm = (v: string | null) => (v ?? "").replace(/\s+/g, " ").trim().toLowerCase();
 
@@ -161,8 +203,174 @@ export type RawFinding = {
   kind?: string;
   canonical?: string;
   variants?: unknown;
+  from?: string;
+  to?: string;
   why?: string;
 };
+
+/** Every run of digits in a value, in order. */
+function numbersIn(value: string): string[] {
+  return value.match(/\d+/g) ?? [];
+}
+
+/**
+ * How many single-character edits apart two strings are, giving up early.
+ *
+ * Used only as a guard rail — "is this a correction of that, or a different
+ * thing entirely" — so an exact answer past the limit is of no interest and
+ * the early exit keeps a long list cheap.
+ */
+export function editDistance(a: string, b: string, limit = 4): number {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > limit) return limit + 1;
+
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    let best = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      current[j] = Math.min(
+        previous[j] + 1,
+        current[j - 1] + 1,
+        previous[j - 1] + cost,
+      );
+      best = Math.min(best, current[j]);
+    }
+    // Every remaining row can only get worse, so stop.
+    if (best > limit) return limit + 1;
+    previous = current;
+  }
+  return previous[b.length];
+}
+
+/** Words of three letters or more, lower-cased. */
+function wordsIn(value: string): Set<string> {
+  return new Set(
+    (value.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((w) => w.length >= 3),
+  );
+}
+
+/**
+ * Is `to` plausibly a corrected form of `from`, rather than a different thing?
+ *
+ * Two ways to qualify: they share a real word ("rope 2m" -> "Rope, 2m"), or
+ * they are within a few characters of each other ("malet" -> "Mallet"). A
+ * suggestion that satisfies neither is the model having an idea of its own,
+ * which is exactly what must not reach the list.
+ */
+export function isPlausibleRename(from: string, to: string): boolean {
+  // Growing by more than a word is a rewrite, not a correction. "Axe"
+  // becoming "Felling axe and sheath" shares a word and would otherwise
+  // sail through, and it is precisely the kind of helpful embellishment
+  // that has no business happening to somebody else's inventory.
+  const tokens = (value: string) => value.match(/[A-Za-z0-9]+/g) ?? [];
+  if (tokens(to).length > tokens(from).length + 1) return false;
+
+  const shared = [...wordsIn(from)].some((word) => wordsIn(to).has(word));
+  return shared || editDistance(from.toLowerCase(), to.toLowerCase()) <= 3;
+}
+
+/**
+ * Checks the model's rename suggestions.
+ *
+ * A rename survives only if:
+ *
+ *  - the value it claims to be correcting genuinely exists;
+ *  - the new value is not already in use — that would be two things being
+ *    merged, which is a different, destructive operation with its own
+ *    confirmation, and must not happen behind the word "rename";
+ *  - every number is unchanged. "2m Stave" becoming "3m Stave" would quietly
+ *    relabel real kit, and a model that is spellchecking has no business
+ *    touching a measurement;
+ *  - it still looks like the same thing.
+ */
+export function verifyRenameFindings(
+  raw: RawFinding[],
+  equipment: Equipment[],
+  already: Finding[] = [],
+): RenameFinding[] {
+  const counts = {
+    item: new Map<string, number>(),
+    location: new Map<string, number>(),
+    category: new Map<string, number>(),
+  };
+  const taken = { item: new Set<string>(), location: new Set<string>(), category: new Set<string>() };
+
+  for (const row of equipment) {
+    const values = {
+      item: row.name,
+      location: row.location,
+      category: row.category,
+    };
+    for (const field of ["item", "location", "category"] as const) {
+      const value = values[field];
+      if (!value?.trim()) continue;
+      counts[field].set(value, (counts[field].get(value) ?? 0) + 1);
+      taken[field].add(norm(value));
+    }
+  }
+
+  // Anything the merge passes are already going to change is not also a
+  // rename: acting on both would rename a row out from under a merge.
+  const spokenFor = new Set<string>();
+  for (const finding of already) {
+    if (finding.kind === "duplicate") spokenFor.add(norm(finding.name));
+    else if (finding.kind === "item-variants") {
+      spokenFor.add(norm(finding.canonical));
+      for (const v of finding.variants) spokenFor.add(norm(v.name));
+    } else if (!isRename(finding)) {
+      spokenFor.add(norm(finding.canonical));
+      for (const v of finding.variants) spokenFor.add(norm(v));
+    }
+  }
+
+  const out: RenameFinding[] = [];
+
+  for (const finding of Array.isArray(raw) ? raw : []) {
+    if (!finding || typeof finding !== "object") continue;
+
+    const field =
+      finding.kind === "item-rename"
+        ? "item"
+        : finding.kind === "location-rename"
+          ? "location"
+          : finding.kind === "category-rename"
+            ? "category"
+            : null;
+    if (!field) continue;
+
+    const from = typeof finding.from === "string" ? finding.from.trim() : "";
+    const to = typeof finding.to === "string" ? finding.to.trim() : "";
+    if (!from || !to || from === to) continue;
+    if (to.length > 80) continue;
+
+    // It has to be correcting something that is really there.
+    const affected = counts[field].get(from);
+    if (!affected) continue;
+    if (spokenFor.has(norm(from))) continue;
+
+    // Renaming onto an existing value is a merge wearing a disguise —
+    // unless the "existing value" is the one being corrected, which is what
+    // a change of capitalisation or spacing looks like from here.
+    if (norm(to) !== norm(from) && taken[field].has(norm(to))) continue;
+
+    if (numbersIn(from).join(",") !== numbersIn(to).join(",")) continue;
+    if (!isPlausibleRename(from, to)) continue;
+
+    spokenFor.add(norm(from));
+    out.push({
+      kind: field === "item" ? "item-rename" : field === "location"
+        ? "location-rename" : "category-rename",
+      from,
+      to,
+      affected,
+      why: (finding.why ?? "").trim() || "Looks like a spelling slip.",
+    });
+  }
+
+  return out;
+}
 
 /**
  * Checks the model's suggestions against the real inventory.
@@ -300,6 +508,17 @@ export function verifyItemFindings(
 
 /** A short, plain description of what applying a finding would do. */
 export function describeFix(finding: Finding): string {
+  if (isRename(finding)) {
+    const noun =
+      finding.kind === "item-rename"
+        ? "item"
+        : finding.kind === "location-rename"
+          ? "item's room"
+          : "item's category";
+    return `Rename to "${finding.to}" on ${finding.affected} ${noun}${
+      finding.affected === 1 ? "" : "s"
+    }. Nothing is merged or deleted, and it can be renamed back.`;
+  }
   if (finding.kind === "duplicate") {
     const where =
       finding.locations.length > 1 ? ` across ${finding.locations.join(", ")}` : "";

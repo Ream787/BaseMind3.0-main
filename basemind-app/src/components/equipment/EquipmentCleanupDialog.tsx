@@ -6,8 +6,10 @@ import { supabase } from "@/lib/supabase/client";
 import {
   describeFix,
   findExactProblems,
+  isRename,
   verifyFindings,
   verifyItemFindings,
+  verifyRenameFindings,
   type Finding,
 } from "@/lib/equipmentCleanup";
 import type { Equipment } from "@/types/database";
@@ -96,9 +98,16 @@ export function EquipmentCleanupDialog({
         }
         // Checked against the real inventory before any of it is shown.
         const raw = data?.findings ?? [];
-        setSuggested([
+        const merges = [
           ...verifyFindings(raw, equipment, exact),
           ...verifyItemFindings(raw, equipment),
+        ];
+        // Renames go last and are told what the merges have claimed: a row
+        // about to be merged away must not also be renamed, or the merge
+        // would look for a name that no longer exists.
+        setSuggested([
+          ...merges,
+          ...verifyRenameFindings(raw, equipment, [...exact, ...merges]),
         ]);
       })
       .catch((err: Error) => {
@@ -115,6 +124,56 @@ export function EquipmentCleanupDialog({
     // this deliberately keys on the dialog opening.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  /** One value corrected in place — a misspelling, or the house style. */
+  async function applyCorrection(finding: Finding) {
+    if (!isRename(finding)) return;
+    setApplying(keyOf(finding));
+    try {
+      // Named per column for the same reason as below: the SET and the WHERE
+      // have to be the same real column, and a computed key hides a mismatch
+      // between them from the compiler.
+      const { error } =
+        finding.kind === "item-rename"
+          ? await supabase
+              .from("equipment")
+              .update({ name: finding.to })
+              .eq("name", finding.from)
+          : finding.kind === "location-rename"
+            ? await supabase
+                .from("equipment")
+                .update({ location: finding.to })
+                .eq("location", finding.from)
+            : await supabase
+                .from("equipment")
+                .update({ category: finding.to })
+                .eq("category", finding.from);
+      if (error) throw new Error(error.message);
+
+      // A room lives on storage places too, and renaming it on the items
+      // while leaving the boxes behind would split one room into two.
+      if (finding.kind === "location-rename") {
+        const { error: placeError } = await supabase
+          .from("storage_places")
+          .update({ location: finding.to })
+          .eq("location", finding.from);
+        if (placeError) throw new Error(placeError.message);
+
+        const { error: placementError } = await supabase
+          .from("equipment_placements")
+          .update({ location: finding.to })
+          .eq("location", finding.from);
+        if (placementError) throw new Error(placementError.message);
+      }
+
+      toast.success(`Renamed to "${finding.to}"`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't rename that.");
+    } finally {
+      setApplying(null);
+      setConfirming(null);
+    }
+  }
 
   async function applyRename(finding: Finding) {
     // Narrowed to the two spelling kinds: the other two merge rows rather
@@ -206,7 +265,8 @@ export function EquipmentCleanupDialog({
         <DialogHeader>
           <DialogTitle>Tidy up the inventory</DialogTitle>
           <DialogDescription>
-            Duplicates and repeated spellings. Nothing changes until you choose it.
+            Duplicates, misspellings and names written against the house style. Nothing
+            changes until you choose it.
           </DialogDescription>
         </DialogHeader>
 
@@ -214,7 +274,8 @@ export function EquipmentCleanupDialog({
           {findings.length === 0 && !asking && (
             <p className="flex items-center gap-2 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
               <Check className="size-4 shrink-0" />
-              Nothing to tidy — no duplicates, and every room and category is spelled one way.
+              Nothing to tidy — no duplicates, nothing misspelled, and every room and
+              category is spelled one way.
             </p>
           )}
 
@@ -223,6 +284,7 @@ export function EquipmentCleanupDialog({
             const isDuplicate = finding.kind === "duplicate";
             const isNameMerge = finding.kind === "item-variants";
             const merges = isDuplicate || isNameMerge;
+            const correction = isRename(finding);
             const busy = applying === key;
             return (
               <div key={key} className="flex flex-col gap-2 rounded-lg border bg-card p-3">
@@ -236,13 +298,15 @@ export function EquipmentCleanupDialog({
                     <p className="text-sm font-medium">
                       {isDuplicate
                         ? `"${finding.name}" is listed as ${finding.itemIds.length} separate rows`
-                        : isNameMerge
-                          ? `"${finding.canonical}" is listed under ${
-                              finding.variants.length + 1
-                            } different names`
-                          : `"${finding.canonical}" is spelled ${
-                              finding.variants.length + 1
-                            } different ways`}
+                        : correction
+                          ? `"${finding.from}" → "${finding.to}"`
+                          : isNameMerge
+                            ? `"${finding.canonical}" is listed under ${
+                                finding.variants.length + 1
+                              } different names`
+                            : `"${finding.canonical}" is spelled ${
+                                finding.variants.length + 1
+                              } different ways`}
                     </p>
                     <p className="text-sm text-muted-foreground">{describeFix(finding)}</p>
                     {!isDuplicate && (
@@ -281,7 +345,9 @@ export function EquipmentCleanupDialog({
                               ? applyMerge(finding)
                               : isNameMerge
                                 ? applyNameMerge(finding)
-                                : applyRename(finding)
+                                : correction
+                                  ? applyCorrection(finding)
+                                  : applyRename(finding)
                           }
                         >
                           {busy && <Loader2 className="size-4 animate-spin" />}
@@ -306,14 +372,14 @@ export function EquipmentCleanupDialog({
           {asking && (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <Sparkles className="size-4 shrink-0" />
-              Looking for spellings of the same thing…
+              Checking spelling and how names are written…
             </p>
           )}
 
           {askError && (
             <p className="text-xs text-muted-foreground">
-              Duplicates and capitalisation are listed above. The check for misspellings
-              couldn&apos;t run: {askError}
+              Duplicates and capitalisation are listed above. The spelling and naming
+              check couldn&apos;t run: {askError}
             </p>
           )}
         </div>
@@ -326,6 +392,7 @@ export function EquipmentCleanupDialog({
 /** Stable identity for a finding, so one card's busy state isn't another's. */
 function keyOf(finding: Finding): string {
   if (finding.kind === "duplicate") return `dup:${finding.itemIds.join(",")}`;
+  if (isRename(finding)) return `${finding.kind}:${finding.from}:${finding.to}`;
   if (finding.kind === "item-variants") {
     return `item:${finding.canonicalId}:${finding.variants.map((v) => v.id).join(",")}`;
   }

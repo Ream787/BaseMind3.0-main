@@ -6,6 +6,7 @@ import { RequireRole } from "@/components/layout/RequireRole";
 import { RequireFeature } from "@/components/layout/RequireFeature";
 import { RouteError } from "@/components/layout/RouteError";
 import type { FeatureKey } from "@/types/database";
+import { TermsPage } from "@/components/legal/TermsPage";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { RegisterPage } from "@/components/auth/RegisterPage";
 import { PendingApprovalPage } from "@/components/auth/PendingApprovalPage";
@@ -99,6 +100,7 @@ export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage />, errorElement: <RouteError /> },
   { path: "/register", element: <RegisterPage />, errorElement: <RouteError /> },
   { path: "/pending", element: <PendingApprovalPage />, errorElement: <RouteError /> },
+  { path: "/terms", element: <TermsPage />, errorElement: <RouteError /> },
   {
     path: "/",
     element: <AppLayout />,

@@ -423,6 +423,35 @@ export type EventFood = {
 
 export type NewEventFood = Omit<EventFood, "id" | "created_at">;
 
+/** How far a reported bug has got. */
+export type BugStatus = "Open" | "Looking at it" | "Fixed" | "Not a bug";
+
+/**
+ * Something a user says is broken.
+ *
+ * `context` is collected by the app rather than typed: browser, screen size,
+ * whether the phone was online. It is the half of a report that decides
+ * whether it can be acted on, and the half nobody thinks to include.
+ */
+export type BugReport = {
+  id: string;
+  reported_by: string | null;
+  summary: string;
+  detail: string | null;
+  page: string | null;
+  context: Record<string, unknown>;
+  status: BugStatus;
+  resolution: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NewBugReport = Pick<BugReport, "summary" | "reported_by"> &
+  Partial<Pick<BugReport, "detail" | "page" | "context">>;
+
+export type BugReportUpdate = Partial<Pick<BugReport, "status" | "resolution">>;
+
 type TableDef<Row, Insert, Update = Partial<Insert>> = {
   Row: Row;
   Insert: Insert;
@@ -444,6 +473,7 @@ export type Database = {
       equipment_checks: TableDef<EquipmentCheck, NewEquipmentCheck>;
       equipment_faults: TableDef<EquipmentFault, NewEquipmentFault, EquipmentFaultUpdate>;
       maze_runs: TableDef<MazeRun, NewMazeRun>;
+      bug_reports: TableDef<BugReport, NewBugReport, BugReportUpdate>;
       equipment_loans: TableDef<EquipmentLoan, NewEquipmentLoan>;
       camping_sites: TableDef<CampingSite, NewCampingSite>;
       events: TableDef<CampEvent, NewCampEvent>;

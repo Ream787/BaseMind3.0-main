@@ -9,6 +9,8 @@ Equipment, camp and food management for a single Scout group, with role-based ac
   each with a QR sticker, so "where is it" is answered down to the shelf
 - **Calendar** — camps, hikes and meetings on a month view, plus what's coming up
 - **Camping sites** — a directory of venues with phone numbers, addresses and descriptions
+- **Reporting a bug** — from the account menu on any page, with the page and browser
+  collected automatically; admins triage them in Admin
 - **Borrowing** — who has what, from which group, and when it's due back, with availability
   taken off the equipment list while it's out
 - **Food store** — what's in the cupboard, in whatever units suit (kg, tins, litres)

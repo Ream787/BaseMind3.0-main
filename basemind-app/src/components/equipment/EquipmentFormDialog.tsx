@@ -106,6 +106,16 @@ interface EquipmentFormDialogProps {
    * files it in the container instead of asking where it is.
    */
   defaultLocation?: string;
+  /**
+   * A storage place to file the new item into, rather than the room itself.
+   *
+   * Set when adding from inside a box or a shelf. The room then isn't a
+   * choice — it is wherever that place is — so the field is replaced by a
+   * line saying where the item is going.
+   */
+  defaultStorageId?: string;
+  /** How that place reads, e.g. "Loft › Cupboard 1 › Box 3". */
+  storageLabel?: string;
 }
 
 export function EquipmentFormDialog({
@@ -116,6 +126,8 @@ export function EquipmentFormDialog({
   locations,
   users,
   defaultLocation,
+  defaultStorageId,
+  storageLabel,
 }: EquipmentFormDialogProps) {
   const { addEquipment, updateEquipment } = useEquipment();
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -137,6 +149,7 @@ export function EquipmentFormDialog({
   }, [open, equipment, defaultLocation]);
 
   const dirty = JSON.stringify(form) !== JSON.stringify(initial);
+  const intoStorage = !equipment && !!defaultStorageId;
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -169,11 +182,11 @@ export function EquipmentFormDialog({
         // straight away rather than sitting under "not placed" waiting for
         // somebody to notice. Where things are lives in placements now; this
         // form's Room field is the answer to "where does it go to start with".
-        if (created && payload.location && payload.quantity > 0) {
+        if (created && payload.quantity > 0 && (intoStorage || payload.location)) {
           const { error } = await supabase.rpc("place_equipment", {
             p_equipment_id: created.id,
-            p_storage_id: null,
-            p_location: payload.location,
+            p_storage_id: intoStorage ? defaultStorageId! : null,
+            p_location: intoStorage ? null : payload.location,
             p_quantity: payload.quantity,
           });
           // The item exists and is correct; only its filing failed.
@@ -249,16 +262,25 @@ export function EquipmentFormDialog({
             </div>
             <div className="flex flex-col gap-2 sm:col-span-2">
               <Label htmlFor="eq-location">Room</Label>
-              <SearchSelect
-                id="eq-location"
-                value={form.location || null}
-                onChange={(v) => set("location", v)}
-                onCreate={(v) => set("location", v)}
-                createLabel="New room"
-                placeholder="Pick a room"
-                searchPlaceholder="Search or type a new one…"
-                options={locations.map((l) => ({ value: l, label: l }))}
-              />
+              {intoStorage ? (
+                // Not a choice: the item is going in the thing you opened
+                // this from, and that is in whatever room it is in. Offering
+                // a room field here would let the two disagree.
+                <p className="flex min-h-9 items-center rounded-md border border-dashed px-3 text-sm text-muted-foreground">
+                  Going into {storageLabel ?? form.location}
+                </p>
+              ) : (
+                <SearchSelect
+                  id="eq-location"
+                  value={form.location || null}
+                  onChange={(v) => set("location", v)}
+                  onCreate={(v) => set("location", v)}
+                  createLabel="New room"
+                  placeholder="Pick a room"
+                  searchPlaceholder="Search or type a new one…"
+                  options={locations.map((l) => ({ value: l, label: l }))}
+                />
+              )}
             </div>
             <div className="flex flex-col gap-2">
               <Label>Colour band</Label>

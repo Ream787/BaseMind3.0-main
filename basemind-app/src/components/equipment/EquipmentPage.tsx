@@ -28,6 +28,7 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { EquipmentTable } from "@/components/equipment/EquipmentTable";
+import { EquipmentDetailDialog } from "@/components/equipment/EquipmentDetailDialog";
 import { EquipmentFormDialog } from "@/components/equipment/EquipmentFormDialog";
 import { EquipmentGroupGrid } from "@/components/equipment/EquipmentGroupGrid";
 import { EquipmentCleanupDialog } from "@/components/equipment/EquipmentCleanupDialog";
@@ -40,6 +41,7 @@ import {
   childrenOf,
   countWithin,
   describePlacements,
+  placementParts,
   looseInRoom,
   roomKey,
   roomOf,
@@ -77,6 +79,7 @@ export function EquipmentPage() {
   const { online } = useOffline();
   const { equipment, loading, error } = useEquipment();
   const [checking, setChecking] = useState<Equipment | null>(null);
+  const [viewing, setViewing] = useState<Equipment | null>(null);
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [coloursOpen, setColoursOpen] = useState(false);
@@ -290,6 +293,15 @@ export function EquipmentPage() {
     return map;
   }, [equipment, placementsByItem, boxesById]);
 
+  /** The same, split by place, for the phone cards to stack. */
+  const placementDetail = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof placementParts>>();
+    for (const item of equipment) {
+      map.set(item.id, placementParts(item, placementsByItem.get(item.id) ?? [], boxesById));
+    }
+    return map;
+  }, [equipment, placementsByItem, boxesById]);
+
   function changeView(next: View) {
     setView(next);
     setOpenGroup(null);
@@ -301,13 +313,21 @@ export function EquipmentPage() {
   }
 
   function openEditDialog(item: Equipment) {
+    setViewing(null);
     setEditingItem(item);
     setDialogOpen(true);
   }
 
   function openLendDialog(item: Equipment) {
+    setViewing(null);
     setLendItemId(item.id);
     setLendOpen(true);
+  }
+
+  /** Stamping a check from the view leaves the view open behind it. */
+  function openCheckDialog(item: Equipment) {
+    setViewing(null);
+    setChecking(item);
   }
 
   async function confirmDelete() {
@@ -593,6 +613,8 @@ export function EquipmentPage() {
             checkingId={checking?.id ?? null}
             writesBlocked={blocked}
             placementSummary={placementSummary}
+            placementDetail={placementDetail}
+            onView={setViewing}
           />
         </>
       )}
@@ -602,6 +624,24 @@ export function EquipmentPage() {
         onOpenChange={setColoursOpen}
         equipment={equipment}
       />
+
+      {/* Mounted only while something is being viewed: it opens a realtime
+          channel for faults, which this page has no other use for. */}
+      {viewing && (
+        <EquipmentDetailDialog
+          item={viewing}
+          onOpenChange={(open) => !open && setViewing(null)}
+          loans={loans}
+          places={boxes}
+          placements={placements}
+          usersById={usersById}
+          canEdit={canEdit}
+          onEdit={openEditDialog}
+          onCheck={openCheckDialog}
+          onLend={openLendDialog}
+          writesBlocked={blocked}
+        />
+      )}
 
       <CheckDialog item={checking} onOpenChange={(open) => !open && setChecking(null)} />
 

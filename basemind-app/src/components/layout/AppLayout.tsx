@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { Navigate, Outlet, NavLink, useLocation } from "react-router";
 import {
+  Bug,
   CalendarDays,
   LogOut,
   Moon,
   Package,
+  ScrollText,
   Settings,
   ShoppingBasket,
   Sparkles,
@@ -20,6 +23,7 @@ import { Logo } from "@/components/ui/logo";
 import { useSecretKnock } from "@/lib/secretKnock";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { OfflineBanner } from "@/components/layout/OfflineBanner";
+import { BugReportDialog } from "@/components/layout/BugReportDialog";
 import {
   ASSISTANT_TABS,
   CAMP_TABS,
@@ -61,6 +65,7 @@ export function AppLayout() {
   const { theme, toggleTheme } = useTheme();
   const { isEnabled } = useFeatures();
   const location = useLocation();
+  const [reportingBug, setReportingBug] = useState(false);
 
   if (loading) {
     return (
@@ -181,6 +186,17 @@ export function AppLayout() {
                   <DropdownMenuSeparator />
                 </>
               )}
+              <DropdownMenuItem onSelect={() => setReportingBug(true)}>
+                <Bug className="size-4" />
+                Report a bug
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <NavLink to="/terms" className="flex items-center gap-2">
+                  <ScrollText className="size-4" />
+                  Terms of use
+                </NavLink>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => logout()}>
                 <LogOut className="size-4" />
                 Sign out
@@ -214,6 +230,8 @@ export function AppLayout() {
           </NavLink>
         ))}
       </nav>
+
+      <BugReportDialog open={reportingBug} onOpenChange={setReportingBug} />
     </div>
   );
 }

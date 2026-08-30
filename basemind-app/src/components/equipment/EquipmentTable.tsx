@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { ClipboardCheck, HandCoins, Pencil, Trash2 } from "lucide-react";
 
 import type { Equipment, EquipmentCondition, EquipmentLoan } from "@/types/database";
+import type { PlacementPart } from "@/lib/placements";
 import { availableQuantity, onLoanQuantity } from "@/lib/loans";
 import { Badge } from "@/components/ui/badge";
 import { ColourSwatch } from "@/components/equipment/ColourSwatch";
@@ -40,6 +41,15 @@ interface EquipmentTableProps {
    * place and so could not describe kit split across two.
    */
   placementSummary?: Map<string, string>;
+  /**
+   * The same answer split by place, for the phone cards.
+   *
+   * The one-line form is right for a table cell and wrong for a card, where
+   * it wrapped into a ragged right-aligned block; one place per line reads.
+   */
+  placementDetail?: Map<string, PlacementPart[]>;
+  /** Opens the read-only view of an item. */
+  onView?: (equipment: Equipment) => void;
   /** Set when writes can't go through — offline, mainly. Explains why. */
   writesBlocked?: string | null;
   /** Id currently being stamped, so its button can show it is working. */
@@ -61,6 +71,44 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+/**
+ * Where an item's units are, on a phone card.
+ *
+ * One place per line under its own heading, rather than squeezed into the
+ * right-hand column beside the label: a trail like "Loft › … › Box 3" and a
+ * count do not fit across from the word "Where" on a 375px screen, and what
+ * came out was a wrapped block that read as one long mistake.
+ */
+function Where({ parts, children }: { parts?: PlacementPart[]; children: ReactNode }) {
+  if (!parts || parts.length === 0) return <Detail label="Where">{children}</Detail>;
+  if (parts.length === 1 && !parts[0].unplaced) {
+    return (
+      <Detail label="Where">
+        {parts[0].where} <span className="text-muted-foreground">×{parts[0].quantity}</span>
+      </Detail>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-0.5">
+      <dt className="text-muted-foreground">Where</dt>
+      <dd className="flex flex-col gap-0.5">
+        {parts.map((part) => (
+          <span
+            key={part.where}
+            className={cn(
+              "flex items-baseline justify-between gap-3",
+              part.unplaced && "text-muted-foreground",
+            )}
+          >
+            <span className="min-w-0 break-words">{part.where}</span>
+            <span className="shrink-0 tabular-nums">×{part.quantity}</span>
+          </span>
+        ))}
+      </dd>
+    </div>
+  );
+}
+
 export function EquipmentTable({
   items,
   usersById,
@@ -73,6 +121,8 @@ export function EquipmentTable({
   onCheck,
   checkingId,
   placementSummary,
+  placementDetail,
+  onView,
   writesBlocked,
 }: EquipmentTableProps) {
   if (items.length === 0) {
@@ -97,42 +147,53 @@ export function EquipmentTable({
             : null;
           return (
             <li key={item.id} className="rounded-lg border bg-card p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 flex-col">
-                  <span className="flex items-center gap-1.5 font-medium">
-                    <ColourSwatch label={item.label_colour} />
-                    {item.name}
-                  </span>
-                  {item.category && (
-                    <span className="text-xs text-muted-foreground">{item.category}</span>
-                  )}
-                </div>
-                <Badge
-                  variant="outline"
-                  className={cn("shrink-0", conditionStyles[item.condition])}
-                >
-                  {item.condition}
-                </Badge>
-              </div>
-
-              <dl className="mt-3 flex flex-col gap-1 text-sm">
-                <Detail label="Quantity">
-                  {item.quantity}
-                  {out > 0 && (
-                    <span className={available === 0 ? "text-destructive" : "text-muted-foreground"}>
-                      {" · "}
-                      {available} free · {out} out
+              {/* The card body opens the item. The buttons below are separate
+                  targets, so a thumb going for Edit doesn't get the view. */}
+              <button
+                type="button"
+                className="w-full text-left"
+                onClick={() => onView?.(item)}
+                disabled={!onView}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-col">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <ColourSwatch label={item.label_colour} />
+                      {item.name}
                     </span>
+                    {item.category && (
+                      <span className="text-xs text-muted-foreground">{item.category}</span>
+                    )}
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn("shrink-0", conditionStyles[item.condition])}
+                  >
+                    {item.condition}
+                  </Badge>
+                </div>
+
+                <dl className="mt-3 flex flex-col gap-1 text-sm">
+                  <Detail label="Quantity">
+                    {item.quantity}
+                    {out > 0 && (
+                      <span
+                        className={available === 0 ? "text-destructive" : "text-muted-foreground"}
+                      >
+                        {" · "}
+                        {available} free · {out} out
+                      </span>
+                    )}
+                  </Detail>
+                  <Where parts={placementDetail?.get(item.id)}>
+                    {placementSummary?.get(item.id) ?? item.location}
+                  </Where>
+                  {item.next_check_date && (
+                    <Detail label="Next check">{item.next_check_date}</Detail>
                   )}
-                </Detail>
-                <Detail label="Where">
-                  {placementSummary?.get(item.id) ?? item.location}
-                </Detail>
-                {item.next_check_date && (
-                  <Detail label="Next check">{item.next_check_date}</Detail>
-                )}
-                {checkedBy && <Detail label="Checked by">{checkedBy}</Detail>}
-              </dl>
+                  {checkedBy && <Detail label="Checked by">{checkedBy}</Detail>}
+                </dl>
+              </button>
 
               {(canEdit || canDelete) && (
                 <div className="mt-2 flex justify-end gap-1 border-t pt-2">
@@ -203,7 +264,11 @@ export function EquipmentTable({
               const out = onLoanQuantity(item.id, loans);
               const available = availableQuantity(item, loans);
               return (
-                <TableRow key={item.id}>
+                <TableRow
+                  key={item.id}
+                  className={onView ? "cursor-pointer" : undefined}
+                  onClick={onView ? () => onView(item) : undefined}
+                >
                   <TableCell className="font-medium">
                     <span className="flex items-center gap-1.5">
                       <ColourSwatch label={item.label_colour} />
@@ -239,7 +304,11 @@ export function EquipmentTable({
                   </TableCell>
                   {(canEdit || canDelete) && (
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
+                      {/* The row opens the item; these do their own thing. */}
+                      <div
+                        className="flex justify-end gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {canEdit && (
                           <Button
                             variant="ghost"

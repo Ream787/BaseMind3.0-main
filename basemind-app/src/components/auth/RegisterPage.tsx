@@ -175,6 +175,13 @@ export function RegisterPage() {
                 Sign in
               </Link>
             </p>
+            <p className="text-xs text-muted-foreground">
+              By using BaseMind you agree to its{" "}
+              <Link to="/terms" className="underline">
+                terms of use
+              </Link>
+              .
+            </p>
           </CardFooter>
         </form>
       </Card>

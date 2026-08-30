@@ -23,12 +23,14 @@ import {
   ancestorsOf,
   childrenOf,
   countWithin,
+  pathOf,
   storageContents,
   unplacedQuantity,
   byEquipment,
 } from "@/lib/placements";
 import type { Equipment, EquipmentPlacement } from "@/types/database";
 import { Button } from "@/components/ui/button";
+import { EquipmentFormDialog } from "@/components/equipment/EquipmentFormDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -85,6 +87,8 @@ export function StoragePlacePage() {
   const [newPlace, setNewPlace] = useState("");
   const [newPlaceKind, setNewPlaceKind] = useState(DEFAULT_KIND);
   const [addingPlace, setAddingPlace] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -168,6 +172,26 @@ export function StoragePlacePage() {
     () => Array.from(new Set(equipment.map((e) => e.location).filter(Boolean))).sort(),
     [equipment],
   );
+
+  const categories = useMemo(
+    () =>
+      Array.from(
+        new Set(equipment.map((e) => e.category).filter((c): c is string => !!c)),
+      ).sort(),
+    [equipment],
+  );
+
+  // Only for the "checked by" list on the full form, so it is fetched when
+  // that form is first opened rather than on every visit to a box.
+  useEffect(() => {
+    if (!formOpen || users.length > 0) return;
+    void supabase
+      .from("users")
+      .select("id, name")
+      .eq("status", "Active")
+      .order("name")
+      .then(({ data }) => setUsers(data ?? []));
+  }, [formOpen, users.length]);
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading box…</p>;
@@ -754,8 +778,37 @@ export function StoragePlacePage() {
                 : `Add "${newItem.trim()}"`}
             </Button>
           )}
+
+          {/* The box above adds a name and a count, which is all anybody
+              wants while standing over an open crate. This is the same
+              thing with the category, colour band and notes — new kit that
+              arrives properly, without going out to the inventory, adding
+              it to a room and coming back to file it. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="self-start text-muted-foreground"
+            disabled={blocked !== null}
+            title={blocked ?? `Add a new item straight into ${box.name}`}
+            onClick={() => setFormOpen(true)}
+          >
+            <Plus className="size-4" />
+            New item, with category and notes
+          </Button>
         </div>
       )}
+      <EquipmentFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        equipment={null}
+        categories={categories}
+        locations={locations}
+        users={users}
+        defaultLocation={box.location}
+        defaultStorageId={box.id}
+        storageLabel={pathOf(box, placesById).join(" › ")}
+      />
+
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>

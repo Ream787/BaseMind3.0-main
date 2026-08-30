@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 
 /**
- * Reads a box sticker with the phone's camera.
+ * Reads a storage sticker with the phone's camera.
  *
  * Two decoders. Chrome on Android has BarcodeDetector built in, which is
  * faster and kinder to the battery than decoding frames in JavaScript;
@@ -145,11 +145,16 @@ export function QrScannerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      {/* Nothing takes focus when this opens. The dialog would otherwise
+          hand it to the code field, and a phone answers a focused text box
+          by throwing up the keyboard — over the camera you came here to
+          look through. Tapping the field still opens it, which is the only
+          time anybody wants it. */}
+      <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
-          <DialogTitle>Scan a box</DialogTitle>
+          <DialogTitle>Scan a sticker</DialogTitle>
           <DialogDescription>
-            Point the camera at the sticker on the box.
+            Point the camera at the sticker on the box, shelf or cupboard.
           </DialogDescription>
         </DialogHeader>
 
@@ -171,7 +176,7 @@ export function QrScannerDialog({
 
         {rejected && !cameraError && (
           <p className="text-xs text-muted-foreground">
-            That code isn&apos;t a BaseMind box sticker ({rejected}). Keep looking, or type
+            That code isn&apos;t a BaseMind sticker ({rejected}). Keep looking, or type
             the code below.
           </p>
         )}

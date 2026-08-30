@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { AlertTriangle, Users } from "lucide-react";
+import { AlertTriangle, Bug, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { FeatureFlag, FeatureKey } from "@/types/database";
 import { MazeLeaderboard } from "@/components/admin/MazeLeaderboard";
+import { BugReportList } from "@/components/admin/BugReportList";
 
 export function AdminPage() {
   const { flags, loading } = useFeatures();
@@ -122,6 +123,18 @@ export function AdminPage() {
             {disabledCount} {disabledCount === 1 ? "feature is" : "features are"} switched off.
           </p>
         )}
+      </section>
+
+      <section className="flex flex-col gap-3 border-t pt-6">
+        <h2 className="flex items-center gap-2 font-medium">
+          <Bug className="size-4" />
+          Reported bugs
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          What people have hit, with the page and browser they hit it on. Closed ones
+          stay listed, so the next person to report the same thing has an answer.
+        </p>
+        <BugReportList />
       </section>
 
       <section className="flex flex-col gap-3 border-t pt-6">

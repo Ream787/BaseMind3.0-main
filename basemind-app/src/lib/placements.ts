@@ -225,28 +225,64 @@ export function describePlacements(
   placements: EquipmentPlacement[] = [],
   placesById: Map<string, StoragePlace>,
 ): string {
+  const parts = placementParts(item, placements, placesById);
+
+  // Nothing filed anywhere reads as a plain "Not placed yet". Appending the
+  // count there produced "not placed yet 1", which states the obvious in the
+  // clumsiest way available: if none of it is placed, how many is all of it.
+  if (parts.length === 1 && parts[0].unplaced) return UNPLACED_LABEL;
+
+  return parts
+    .map((part) => `${part.unplaced ? part.where.toLowerCase() : part.where} ×${part.quantity}`)
+    .join(" · ");
+}
+
+/** One place this item's units are, and how many are there. */
+export type PlacementPart = {
+  where: string;
+  quantity: number;
+  /** True for the tail row: units not filed anywhere yet. */
+  unplaced: boolean;
+};
+
+/**
+ * The same answer as describePlacements, in pieces.
+ *
+ * A phone card cannot show "Loft › … › Box 3 ×5 · Loft ×2 · not placed yet
+ * ×3" as one right-aligned run of text without it wrapping into a ragged
+ * block that reads as noise. Given the parts, it can put one place per line
+ * with the count against the edge, which is the same information and
+ * actually legible on the walk to the store.
+ */
+export function placementParts(
+  item: Equipment,
+  placements: EquipmentPlacement[] = [],
+  placesById: Map<string, StoragePlace>,
+): PlacementPart[] {
   const parts = placements
     .map((p) => {
       if (p.storage_id !== null) {
         const place = placesById.get(p.storage_id);
         return place
-          ? { where: describePath(pathOf(place, placesById)), quantity: p.quantity }
+          ? {
+              where: describePath(pathOf(place, placesById)),
+              quantity: p.quantity,
+              unplaced: false,
+            }
           : null;
       }
       const room = (p.location ?? "").trim();
-      return room ? { where: room, quantity: p.quantity } : null;
+      return room ? { where: room, quantity: p.quantity, unplaced: false } : null;
     })
-    .filter((part): part is { where: string; quantity: number } => part !== null)
-    .sort((a, b) => b.quantity - a.quantity || a.where.localeCompare(b.where))
-    .map((part) => `${part.where} ×${part.quantity}`);
-
-  // Nothing filed anywhere reads as a plain "Not placed yet". Appending the
-  // count there produced "not placed yet 1", which states the obvious in the
-  // clumsiest way available: if none of it is placed, how many is all of it.
-  if (parts.length === 0) return UNPLACED_LABEL;
+    .filter((part): part is PlacementPart => part !== null)
+    .sort((a, b) => b.quantity - a.quantity || a.where.localeCompare(b.where));
 
   const spare = unplacedQuantity(item, placements);
-  if (spare > 0) parts.push(`${UNPLACED_LABEL.toLowerCase()} ×${spare}`);
+  // Everything unaccounted for is one row at the end — including the case
+  // where none of it is placed, which is the whole quantity.
+  if (spare > 0 || parts.length === 0) {
+    parts.push({ where: UNPLACED_LABEL, quantity: spare || item.quantity, unplaced: true });
+  }
 
-  return parts.join(" · ");
+  return parts;
 }
