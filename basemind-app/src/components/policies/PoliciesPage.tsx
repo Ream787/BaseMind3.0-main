@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
-import { FileText, Link2, Loader2, RefreshCw, Search, Trash2, Upload } from "lucide-react";
+import { FileText, FolderTree, Link2, Loader2, RefreshCw, Search, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { SectionTabs, ASSISTANT_TABS } from "@/components/layout/SectionTabs";
+import { groupPolicies, verifyFilings } from "@/lib/policySort";
 
 /** Just the site name from a link, since the full URL never fits. */
 function hostOf(url: string): string {
@@ -60,6 +61,7 @@ export function PoliciesPage() {
   const [linkOpen, setLinkOpen] = useState(false);
   const [link, setLink] = useState("");
   const [refreshing, setRefreshing] = useState<string | null>(null);
+  const [sorting, setSorting] = useState(false);
 
   // Adding a policy changes what the assistant tells everyone, so it's held
   // to Manager and above — the same bar as the database enforces.
@@ -173,6 +175,57 @@ export function PoliciesPage() {
     });
   }
 
+  /**
+   * Files the documents into categories.
+   *
+   * Applied straight away rather than shown as suggestions first: a category
+   * is a label on a shelf, and putting it back is one dropdown away. That is
+   * a very different risk from merging two rows together, which is why this
+   * doesn't ask and the equipment tidy-up does.
+   */
+  async function sortIntoCategories() {
+    setSorting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("policy-sort", {
+        body: {
+          documents: policies.map((p) => ({
+            title: p.title,
+            // The opening is enough to tell what a policy is about.
+            excerpt: p.content.slice(0, 400),
+          })),
+        },
+      });
+      if (error) {
+        const context = (error as { context?: Response }).context;
+        const body = await context?.json().catch(() => null);
+        throw new Error(body?.error ?? body?.detail ?? error.message);
+      }
+
+      const filings = verifyFilings(data?.filed ?? [], policies);
+      if (filings.length === 0) {
+        toast.success("Everything is already filed sensibly.");
+        return;
+      }
+
+      for (const filing of filings) {
+        const { error: updateError } = await supabase
+          .from("policies")
+          .update({ category: filing.category })
+          .eq("id", filing.policyId);
+        if (updateError) throw new Error(updateError.message);
+      }
+      toast.success(
+        filings.length === 1
+          ? `Filed "${filings[0].title}" under ${filings[0].category}`
+          : `Filed ${filings.length} documents`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't sort those.");
+    } finally {
+      setSorting(false);
+    }
+  }
+
   async function openOriginal(policy: Policy) {
     if (!policy.storage_path) return;
     setOpening(policy.id);
@@ -221,6 +274,21 @@ export function PoliciesPage() {
                 if (file) handleUpload(file);
               }}
             />
+            {policies.length > 1 && (
+              <Button
+                variant="outline"
+                onClick={sortIntoCategories}
+                disabled={sorting || !online}
+                title={online ? "Group them by what they are about" : "Needs a connection"}
+              >
+                {sorting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <FolderTree className="size-4" />
+                )}
+                {sorting ? "Filing…" : "Sort into groups"}
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => setLinkOpen(true)}
@@ -284,8 +352,15 @@ export function PoliciesPage() {
             )}
           </div>
         ) : (
-          <ul className="flex flex-col gap-2">
-            {filtered.map((policy) => (
+          <div className="flex flex-col gap-5">
+            {groupPolicies(filtered).map((group) => (
+              <section key={group.category} className="flex flex-col gap-2">
+                <h3 className="text-sm font-medium text-muted-foreground">
+                  {group.category}
+                  <span className="ml-2 font-normal">{group.policies.length}</span>
+                </h3>
+                <ul className="flex flex-col gap-2">
+                  {group.policies.map((policy) => (
               <li key={policy.id} className="rounded-lg border bg-card p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 flex-col">
@@ -350,9 +425,12 @@ export function PoliciesPage() {
                     )}
                   </div>
                 </div>
-              </li>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
         )}
       </section>
 

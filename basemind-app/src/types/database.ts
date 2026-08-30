@@ -9,6 +9,8 @@ export type EquipmentCondition = "Good" | "Needs Repair" | "Broken" | "Missing";
 export type UserProfile = {
   id: string;
   email: string;
+  /** Null for accounts that predate usernames and had no email to derive one. */
+  username: string | null;
   name: string;
   phone: string | null;
   role: Role;

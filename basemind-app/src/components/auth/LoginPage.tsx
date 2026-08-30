@@ -21,7 +21,7 @@ import {
 export function LoginPage() {
   const { session, loading, login } = useAuth();
   const { online } = useOffline();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -59,7 +59,7 @@ export function LoginPage() {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
-    const loginError = await login(email, password);
+    const loginError = await login(identifier, password);
     setSubmitting(false);
     if (loginError) setError(loginError);
   }
@@ -76,14 +76,18 @@ export function LoginPage() {
         <form onSubmit={handleSubmit}>
           <CardContent className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="identifier">Username or email</Label>
+              {/* type="text", not "email": the browser would otherwise refuse
+                  to submit a perfectly good username for not having an @. */}
               <Input
-                id="email"
-                type="email"
-                autoComplete="email"
+                id="identifier"
+                type="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                autoComplete="username"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
               />
             </div>
             <div className="flex flex-col gap-2">

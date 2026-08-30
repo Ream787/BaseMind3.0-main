@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 
 import { supabase } from "@/lib/supabase/client";
 import { idbGet, idbSet, idbDelete } from "@/lib/offline/db";
+import { signInEmailFor } from "@/lib/usernames";
 import type { Role, UserProfile } from "@/types/database";
 
 const profileKey = (userId: string) => `profile:${userId}`;
@@ -14,7 +15,8 @@ interface AuthContextType {
   error: string | null;
   /** True when the profile came from cache because the server was unreachable. */
   usingCachedProfile: boolean;
-  login: (email: string, password: string) => Promise<string | null>;
+  /** Takes a username or an email; either signs the same account in. */
+  login: (identifier: string, password: string) => Promise<string | null>;
   logout: () => Promise<void>;
   hasRole: (roles: Role[]) => boolean;
   /**
@@ -102,15 +104,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  async function login(email: string, password: string) {
+  async function login(identifier: string, password: string) {
     setError(null);
+    // A username maps to a fixed derived address, so this works without ever
+    // asking the server who owns a username — which would be a way to read
+    // people's email addresses out of the app.
+    const email = signInEmailFor(identifier);
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     if (signInError) {
       // Signing in genuinely needs the server; say so plainly rather than
       // reporting it as a rejected password.
       const message = /fetch|network|timeout/i.test(signInError.message)
         ? "Can't reach the server. Check your connection and try again."
-        : signInError.message;
+        : /invalid login credentials/i.test(signInError.message)
+          ? "That username or password isn't right."
+          : signInError.message;
       setError(message);
       return message;
     }

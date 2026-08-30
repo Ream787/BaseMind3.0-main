@@ -30,6 +30,10 @@ export function useSecretKnock(
     if (timer.current) clearTimeout(timer.current);
     count.current += 1;
 
+    // Every tap goes home — that is what a wordmark is for, and it keeps the
+    // egg hidden: nine taps look exactly like nine people going home.
+    navigate("/home");
+
     if (count.current >= taps) {
       count.current = 0;
       timer.current = null;

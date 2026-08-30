@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import type { Role, UserProfile, UserStatus } from "@/types/database";
+import { displayEmail } from "@/lib/usernames";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { Button } from "@/components/ui/button";
@@ -136,7 +137,9 @@ export function UserManagementPage() {
                           </span>
                         )}
                       </span>
-                      <span className="truncate text-sm text-muted-foreground">{user.email}</span>
+                      <span className="truncate text-sm text-muted-foreground">
+                        {user.username ?? displayEmail(user.email)}
+                      </span>
                     </div>
                     <Badge variant="outline" className={statusStyles[user.status]}>
                       {user.status}
@@ -193,7 +196,7 @@ export function UserManagementPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
+                  <TableHead>Username</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -216,7 +219,9 @@ export function UserManagementPage() {
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {user.username ?? displayEmail(user.email)}
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={statusStyles[user.status]}>
                           {user.status}

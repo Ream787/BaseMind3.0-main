@@ -60,6 +60,9 @@ const AssistantPage = lazy(() =>
 const AdminPage = lazy(() =>
   import("@/components/admin/AdminPage").then((m) => ({ default: m.AdminPage })),
 );
+const HomePage = lazy(() =>
+  import("@/components/home/HomePage").then((m) => ({ default: m.HomePage })),
+);
 const MazeGame = lazy(() =>
   import("@/components/easteregg/MazeGame").then((m) => ({ default: m.MazeGame })),
 );
@@ -146,6 +149,9 @@ export const router = createBrowserRouter([
       { path: "forms", element: <Gate feature="forms"><FormsPage /></Gate> },
       { path: "assistant", element: <Gate feature="policies"><AssistantPage /></Gate> },
       { path: "policies", element: <Gate feature="policies"><PoliciesPage /></Gate> },
+      // Reached from the wordmark rather than being the landing page:
+      // people open the app to do a thing, not to read a dashboard.
+      { path: "home", element: <Lazy><HomePage /></Lazy> },
       { path: "profile", element: <Lazy><ProfilePage /></Lazy> },
       // Unlisted on purpose: reached by tapping the wordmark ten times, or
       // by typing the URL if somebody lets that slip.
