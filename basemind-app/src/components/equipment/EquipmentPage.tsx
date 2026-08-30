@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Box, ChevronRight, Plus, QrCode, Search, Sparkles } from "lucide-react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { addMonths, format } from "date-fns";
 import { toast } from "sonner";
 
@@ -81,7 +81,35 @@ export function EquipmentPage() {
   const [search, setSearch] = useState("");
   const [conditionFilter, setConditionFilter] = useState<EquipmentCondition | "All">("All");
   const [view, setView] = useState<View>("location");
-  const [openGroup, setOpenGroup] = useState<{ key: string; name: string } | null>(null);
+
+  /**
+   * Which room is open, kept in the URL rather than in component state.
+   *
+   * Adding a box, or scanning one, navigates away and back — and with this in
+   * state that always dumped you at the top of the room list, having to find
+   * your way back into the room you were standing in.
+   */
+  const [params, setParams] = useSearchParams();
+  const openRoomName = params.get("room");
+  const openGroup = useMemo(
+    () => (openRoomName ? { key: roomKey(openRoomName), name: openRoomName } : null),
+    [openRoomName],
+  );
+
+  const setOpenGroup = useCallback(
+    (group: { key: string; name: string } | null) => {
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (group) next.set("room", group.name);
+          else next.delete("room");
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setParams],
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Equipment | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Equipment | null>(null);
@@ -564,6 +592,7 @@ export function EquipmentPage() {
       />
 
       <EquipmentFormDialog
+        defaultLocation={view === "location" ? (openGroup?.name ?? undefined) : undefined}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         equipment={editingItem}

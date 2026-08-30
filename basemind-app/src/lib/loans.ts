@@ -66,15 +66,3 @@ export function sortByUrgency(loans: EquipmentLoan[]): EquipmentLoan[] {
   });
 }
 
-/** Distinct borrower details from past loans, for autocomplete. */
-export function knownBorrowers(loans: EquipmentLoan[]) {
-  const seen = new Map<string, EquipmentLoan>();
-  // Later loans win, so autocomplete offers the most recent contact details.
-  for (const loan of [...loans].sort((a, b) => a.borrowed_on.localeCompare(b.borrowed_on))) {
-    const key = loan.borrower_name.trim().toLowerCase();
-    if (key) seen.set(key, loan);
-  }
-  return [...seen.values()].sort((a, b) =>
-    a.borrower_name.localeCompare(b.borrower_name, undefined, { sensitivity: "base" }),
-  );
-}

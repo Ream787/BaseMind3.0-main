@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { addMonths, format, parseISO } from "date-fns";
-import { useNavigate } from "react-router";
 import { ArrowLeft, Check, Plus, QrCode, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -315,14 +314,16 @@ export function BoxDetailPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Back to the room this box sits in, since that is where boxes are
-          listed — there is no separate boxes page any more. */}
+      {/* Back into the room this box sits in, not to the top of the room
+          list. Coming out of a box you have just filled and having to find
+          your way back into the container is the kind of small tax that
+          stops people using the thing. */}
       <Link
-        to="/equipment"
+        to={`/equipment?room=${encodeURIComponent(box.location)}`}
         className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="size-4" />
-        Equipment
+        {box.location}
       </Link>
 
       {/* Stacked on a phone. Side by side, the name and store fields and the

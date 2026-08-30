@@ -69,6 +69,9 @@ function toFormState(equipment: Equipment): FormState {
   };
 }
 
+/** Sentinel for the "somewhere new" choice in the room dropdown. */
+const NEW_ROOM = "__new_room";
+
 interface EquipmentFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -76,6 +79,13 @@ interface EquipmentFormDialogProps {
   categories: string[];
   locations: string[];
   users: UserOption[];
+  /**
+   * The room to start in when adding.
+   *
+   * Set when a room is open, so adding kit while standing in the container
+   * files it in the container instead of asking where it is.
+   */
+  defaultLocation?: string;
 }
 
 export function EquipmentFormDialog({
@@ -85,6 +95,7 @@ export function EquipmentFormDialog({
   categories,
   locations,
   users,
+  defaultLocation,
 }: EquipmentFormDialogProps) {
   const { addEquipment, updateEquipment } = useEquipment();
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -93,13 +104,19 @@ export function EquipmentFormDialog({
   const [initial, setInitial] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
 
+  // True while typing a room that doesn't exist yet.
+  const [newRoom, setNewRoom] = useState(false);
+
   useEffect(() => {
     if (open) {
-      const start = equipment ? toFormState(equipment) : emptyForm;
+      const start = equipment
+        ? toFormState(equipment)
+        : { ...emptyForm, location: defaultLocation ?? "" };
       setForm(start);
       setInitial(start);
+      setNewRoom(false);
     }
-  }, [open, equipment]);
+  }, [open, equipment, defaultLocation]);
 
   const dirty = JSON.stringify(form) !== JSON.stringify(initial);
 
@@ -210,19 +227,59 @@ export function EquipmentFormDialog({
               />
             </div>
             <div className="flex flex-col gap-2 sm:col-span-2">
-              <Label htmlFor="eq-location">Location</Label>
-              <Input
-                id="eq-location"
-                list="eq-location-options"
-                required
-                value={form.location}
-                onChange={(e) => set("location", e.target.value)}
-              />
-              <datalist id="eq-location-options">
-                {locations.map((l) => (
-                  <option key={l} value={l} />
-                ))}
-              </datalist>
+              <Label htmlFor="eq-location">Room</Label>
+              {/* A list of the rooms that exist, rather than a free text box.
+                  Typing the room every time is how "Store Room", "store room"
+                  and "Strore Room" all end up in the same inventory. Adding a
+                  genuinely new one is still one tap away. */}
+              {newRoom || locations.length === 0 ? (
+                <div className="flex gap-2">
+                  <Input
+                    id="eq-location"
+                    required
+                    autoFocus={newRoom}
+                    placeholder="New room name"
+                    value={form.location}
+                    onChange={(e) => set("location", e.target.value)}
+                  />
+                  {locations.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setNewRoom(false);
+                        set("location", defaultLocation ?? locations[0]);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <Select
+                  value={form.location || undefined}
+                  onValueChange={(v) => {
+                    if (v === NEW_ROOM) {
+                      setNewRoom(true);
+                      set("location", "");
+                    } else {
+                      set("location", v);
+                    }
+                  }}
+                >
+                  <SelectTrigger id="eq-location">
+                    <SelectValue placeholder="Pick a room" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locations.map((l) => (
+                      <SelectItem key={l} value={l}>
+                        {l}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={NEW_ROOM}>+ Somewhere new…</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="flex flex-col gap-2">
               <Label>Condition</Label>

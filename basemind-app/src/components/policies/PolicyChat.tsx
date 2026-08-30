@@ -177,7 +177,7 @@ function Answer({
   const result = message.result!;
 
   return (
-    <div className="flex max-w-[95%] flex-col gap-2 self-start rounded-2xl rounded-bl-sm border bg-card p-3 sm:max-w-[85%]">
+    <div className="flex w-full flex-col gap-2 self-start rounded-2xl rounded-bl-sm border bg-card p-3 sm:max-w-[85%]">
       {!result.covered && (
         <p className="flex items-center gap-2 text-sm font-medium">
           <SearchX className="size-4 shrink-0 text-muted-foreground" />
@@ -211,7 +211,10 @@ function Answer({
               <span className="text-xs font-medium text-muted-foreground">
                 These documents can answer
               </span>
-              <div className="flex flex-wrap gap-2">
+              {/* Stacked full-width on a phone. Side by side, a question
+                  long enough to be worth suggesting was wider than the card
+                  and pushed the whole answer sideways. */}
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 {result.related.map((suggestion, i) => (
                   <Button
                     key={i}
@@ -220,7 +223,7 @@ function Answer({
                     size="sm"
                     disabled={asking || offline}
                     onClick={() => onAsk(suggestion)}
-                    className="h-auto whitespace-normal py-1.5 text-left text-xs"
+                    className="h-auto w-full justify-start whitespace-normal py-2 text-left text-xs sm:w-auto"
                   >
                     {suggestion}
                   </Button>

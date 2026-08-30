@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
-import { availableQuantity, knownBorrowers, todayISO } from "@/lib/loans";
+import { availableQuantity, todayISO } from "@/lib/loans";
 import type { Equipment, EquipmentLoan } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -112,7 +112,6 @@ export function LoanFormDialog({
     setInitial(start);
   }, [open, editing, presetEquipmentId]);
 
-  const borrowers = useMemo(() => knownBorrowers(loans), [loans]);
   const scoutGroups = useMemo(
     () =>
       Array.from(
@@ -129,23 +128,16 @@ export function LoanFormDialog({
     ? availableQuantity(selectedItem, loans) + (editing && !editing.returned_on ? editing.quantity : 0)
     : 0;
 
-  /** Filling in a past borrower's name copies their details across. */
+  /**
+   * Just sets the name.
+   *
+   * It used to look the name up among past borrowers and copy their phone,
+   * email, group and position across. That quietly turned the loan history
+   * into a contact book that suggested people's details to anyone opening
+   * the form, so it is gone: what gets stored is only what is typed now.
+   */
   function applyBorrower(name: string) {
-    const match = borrowers.find(
-      (b) => b.borrower_name.trim().toLowerCase() === name.trim().toLowerCase(),
-    );
-    setForm((prev) => ({
-      ...prev,
-      borrower_name: name,
-      ...(match
-        ? {
-            scout_group: match.scout_group ?? prev.scout_group,
-            position: match.position ?? prev.position,
-            phone: match.phone ?? prev.phone,
-            email: match.email ?? prev.email,
-          }
-        : {}),
-    }));
+    setForm((prev) => ({ ...prev, borrower_name: name }));
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -168,11 +160,6 @@ export function LoanFormDialog({
       setFormError("The return date can't be before the borrow date.");
       return;
     }
-    if (!form.phone.trim() && !form.email.trim()) {
-      setFormError("Add a phone number or an email so you can chase it up.");
-      return;
-    }
-
     setFormError(null);
     setSubmitting(true);
 
@@ -267,19 +254,17 @@ export function LoanFormDialog({
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="loan-borrower">Borrower</Label>
+            {/* No suggestions here on purpose. Offering past borrowers'
+                names showed one person's details to whoever opened the form
+                next, which is not something a kit list should do. */}
             <Input
               id="loan-borrower"
-              list="loan-borrower-options"
               required
+              autoComplete="off"
               placeholder="Full name"
               value={form.borrower_name}
               onChange={(e) => applyBorrower(e.target.value)}
             />
-            <datalist id="loan-borrower-options">
-              {borrowers.map((b) => (
-                <option key={b.id} value={b.borrower_name} />
-              ))}
-            </datalist>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -319,6 +304,7 @@ export function LoanFormDialog({
               <Label htmlFor="loan-phone">Phone</Label>
               <Input
                 id="loan-phone"
+                autoComplete="off"
                 type="tel"
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
@@ -329,6 +315,7 @@ export function LoanFormDialog({
               <Input
                 id="loan-email"
                 type="email"
+                autoComplete="off"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
               />
