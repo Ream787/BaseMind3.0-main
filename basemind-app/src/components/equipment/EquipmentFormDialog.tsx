@@ -172,7 +172,7 @@ export function EquipmentFormDialog({
         if (created && payload.location && payload.quantity > 0) {
           const { error } = await supabase.rpc("place_equipment", {
             p_equipment_id: created.id,
-            p_box_id: null,
+            p_storage_id: null,
             p_location: payload.location,
             p_quantity: payload.quantity,
           });

@@ -33,10 +33,12 @@ import { EquipmentGroupGrid } from "@/components/equipment/EquipmentGroupGrid";
 import { EquipmentCleanupDialog } from "@/components/equipment/EquipmentCleanupDialog";
 import { CheckDialog } from "@/components/equipment/CheckDialog";
 import { ColourIndexDialog } from "@/components/equipment/ColourIndexDialog";
-import { QrScannerDialog } from "@/components/boxes/QrScannerDialog";
+import { QrScannerDialog } from "@/components/storage/QrScannerDialog";
 import { generateBoxCode } from "@/lib/boxes";
 import {
   byEquipment,
+  childrenOf,
+  countWithin,
   describePlacements,
   looseInRoom,
   roomKey,
@@ -119,7 +121,7 @@ export function EquipmentPage() {
   const [lendItemId, setLendItemId] = useState<string | undefined>();
 
   const { rows: loans } = useRealtimeTable("equipment_loans");
-  const { rows: boxes } = useRealtimeTable("equipment_boxes", { orderBy: "name" });
+  const { rows: boxes } = useRealtimeTable("storage_places", { orderBy: "name" });
   const { rows: placements } = useRealtimeTable("equipment_placements");
 
   const canEdit = hasRole(["Admin", "Manager", "Member"]);
@@ -189,10 +191,17 @@ export function EquipmentPage() {
   );
   const placementsByItem = useMemo(() => byEquipment(placements), [placements]);
 
-  /** Boxes per room, keyed the way the room grid keys its groups. */
+  /**
+   * The storage places standing directly in each room.
+   *
+   * Only the top level. A shelf inside a cupboard belongs on the cupboard's
+   * page, not loose in the room beside it — listing both would mean opening
+   * the room and seeing the same shelf twice.
+   */
   const boxesByRoom = useMemo(() => {
     const map = new Map<string, typeof boxes>();
     for (const box of boxes) {
+      if (box.parent_id !== null) continue;
       const key = roomKey(box.location.trim() || UNGROUPED_LABEL.location);
       const bucket = map.get(key);
       if (bucket) bucket.push(box);
@@ -242,13 +251,19 @@ export function EquipmentPage() {
     [view, openGroup, boxesByRoom],
   );
 
+  /**
+   * What each room-level place holds, counting everything nested inside it.
+   *
+   * A cupboard whose kit is all on its shelves holds nothing of its own, and
+   * a card reading "0 items" on a full cupboard is a card nobody opens.
+   */
   const itemCountByBox = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const p of placements) {
-      if (p.box_id) counts.set(p.box_id, (counts.get(p.box_id) ?? 0) + 1);
+    for (const box of openRoomBoxes) {
+      counts.set(box.id, countWithin(box.id, boxes, placements));
     }
     return counts;
-  }, [placements]);
+  }, [openRoomBoxes, boxes, placements]);
 
   /**
    * Inside a room, kit that is in one of its boxes is shown in that box
@@ -311,8 +326,9 @@ export function EquipmentPage() {
 
   /**
    * A scanned sticker always lands somewhere useful. An unknown one creates
-   * its box: the person is holding a real sticker on a real box, and telling
-   * them "not found" would mean walking away to add it and coming back.
+   * the place: the person is holding a real sticker on a real box or shelf,
+   * and telling them "not found" would mean walking away to add it and
+   * coming back.
    */
   async function openScanned(code: string) {
     setScanning(false);
@@ -322,11 +338,13 @@ export function EquipmentPage() {
       return;
     }
     if (!canEdit) {
-      toast.error("That sticker isn't on a box yet, and adding one is for Members and above.");
+      toast.error(
+        "That sticker isn't on anything yet, and adding a place is for Members and above.",
+      );
       return;
     }
     const { data, error: createError } = await supabase
-      .from("equipment_boxes")
+      .from("storage_places")
       .insert({
         code,
         created_by: profile?.id ?? null,
@@ -335,16 +353,16 @@ export function EquipmentPage() {
       .select()
       .single();
     if (createError || !data) {
-      toast.error(createError?.message ?? "Couldn't create that box.");
+      toast.error(createError?.message ?? "Couldn't create that place.");
       return;
     }
-    toast.success(`Box ${data.code} created — name it and put things in it`);
+    toast.success(`${data.code} created — name it and put things in it`);
     navigate(`/boxes/${encodeURIComponent(data.code)}`);
   }
 
   async function addBoxHere() {
     const { data, error: createError } = await supabase
-      .from("equipment_boxes")
+      .from("storage_places")
       .insert({
         code: generateBoxCode(),
         created_by: profile?.id ?? null,
@@ -353,7 +371,7 @@ export function EquipmentPage() {
       .select()
       .single();
     if (createError || !data) {
-      toast.error(createError?.message ?? "Couldn't create that box.");
+      toast.error(createError?.message ?? "Couldn't create that place.");
       return;
     }
     navigate(`/boxes/${encodeURIComponent(data.code)}`);
@@ -398,10 +416,10 @@ export function EquipmentPage() {
             className="flex-1 sm:flex-none"
             onClick={() => setScanning(true)}
             disabled={blocked !== null}
-            title={blocked ?? "Scan a box sticker"}
+            title={blocked ?? "Scan a sticker"}
           >
             <QrCode className="size-4" />
-            Scan a box
+            Scan a sticker
           </Button>
           {canEdit && (
             <Button
@@ -507,8 +525,10 @@ export function EquipmentPage() {
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-sm font-medium text-muted-foreground">
                   {openRoomBoxes.length === 0
-                    ? "No boxes in here yet"
-                    : `${openRoomBoxes.length} ${openRoomBoxes.length === 1 ? "box" : "boxes"}`}
+                    ? "Nothing to open in here yet"
+                    : `${openRoomBoxes.length} ${
+                        openRoomBoxes.length === 1 ? "place" : "places"
+                      } in here`}
                 </h2>
                 {canEdit && (
                   <Button
@@ -516,10 +536,10 @@ export function EquipmentPage() {
                     size="sm"
                     onClick={addBoxHere}
                     disabled={blocked !== null}
-                    title={blocked ?? "Add a box to this room"}
+                    title={blocked ?? "Add a box, shelf or cupboard to this room"}
                   >
                     <Plus className="size-4" />
-                    New box
+                    New place
                   </Button>
                 )}
               </div>
@@ -527,6 +547,7 @@ export function EquipmentPage() {
                 <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {openRoomBoxes.map((box) => {
                     const count = itemCountByBox.get(box.id) ?? 0;
+                    const within = childrenOf(box.id, boxes).length;
                     return (
                       <li key={box.id}>
                         <button
@@ -538,7 +559,9 @@ export function EquipmentPage() {
                           <div className="flex min-w-0 flex-1 flex-col">
                             <span className="truncate font-medium">{box.name}</span>
                             <span className="text-xs text-muted-foreground">
-                              {count} {count === 1 ? "item" : "items"} · {box.code}
+                              {box.kind} · {count} {count === 1 ? "item" : "items"}
+                              {within > 0 &&
+                                ` · ${within} ${within === 1 ? "place" : "places"} inside`}
                             </span>
                           </div>
                           <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />

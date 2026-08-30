@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { addMonths, format, parseISO } from "date-fns";
-import { ArrowLeft, Check, Plus, QrCode, Trash2, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  ChevronRight,
+  Package,
+  Plus,
+  QrCode,
+  Trash2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
@@ -9,14 +18,21 @@ import { useAuth } from "@/context/AuthContext";
 import { useOffline } from "@/context/OfflineContext";
 import { useEquipment } from "@/context/EquipmentContext";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
-import { canonical } from "@/lib/boxes";
-import { boxContents, unplacedQuantity, byEquipment } from "@/lib/placements";
+import { canonical, generateBoxCode } from "@/lib/boxes";
+import {
+  ancestorsOf,
+  childrenOf,
+  countWithin,
+  storageContents,
+  unplacedQuantity,
+  byEquipment,
+} from "@/lib/placements";
 import type { Equipment, EquipmentPlacement } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { BoxQrCode } from "@/components/boxes/BoxQrCode";
+import { StorageQrCode } from "@/components/storage/StorageQrCode";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -32,6 +48,16 @@ import {
 const MONTHS_UNTIL_NEXT_CHECK = 6;
 
 /**
+ * The kinds offered, and the one assumed.
+ *
+ * A list of suggestions rather than a fixed set — the column is free text on
+ * purpose. Groups have hanging racks, ammo cans and "the corner behind the
+ * door", and forcing all of those into Other tells nobody anything.
+ */
+const KINDS = ["Box", "Shelf", "Cupboard", "Crate", "Trailer", "Rack"];
+const DEFAULT_KIND = "Box";
+
+/**
  * One box: what should be in it, and checking that it is.
  *
  * The check is per item and immediate — each tap writes straight away rather
@@ -39,13 +65,13 @@ const MONTHS_UNTIL_NEXT_CHECK = 6;
  * is worth more than a whole one lost because a phone slept in a store room
  * with no signal.
  */
-export function BoxDetailPage() {
+export function StoragePlacePage() {
   const { code = "" } = useParams();
   const navigate = useNavigate();
   const { profile, hasRole } = useAuth();
   const { online } = useOffline();
   const { equipment, updateEquipment } = useEquipment();
-  const { rows: boxes, loading } = useRealtimeTable("equipment_boxes", { orderBy: "name" });
+  const { rows: places, loading } = useRealtimeTable("storage_places", { orderBy: "name" });
   const { rows: placements } = useRealtimeTable("equipment_placements");
 
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -55,6 +81,10 @@ export function BoxDetailPage() {
   const [adding, setAdding] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [draftLocation, setDraftLocation] = useState("");
+  const [draftKind, setDraftKind] = useState("");
+  const [newPlace, setNewPlace] = useState("");
+  const [newPlaceKind, setNewPlaceKind] = useState(DEFAULT_KIND);
+  const [addingPlace, setAddingPlace] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -74,8 +104,8 @@ export function BoxDetailPage() {
   const blocked = !online ? "You're offline — changes can't be saved yet" : null;
 
   const box = useMemo(
-    () => boxes.find((b) => canonical(b.code) === canonical(code)),
-    [boxes, code],
+    () => places.find((b) => canonical(b.code) === canonical(code)),
+    [places, code],
   );
 
   const equipmentById = useMemo(
@@ -84,9 +114,26 @@ export function BoxDetailPage() {
   );
   const placementsByItem = useMemo(() => byEquipment(placements), [placements]);
 
+  const placesById = useMemo(
+    () => new Map(places.map((pl) => [pl.id, pl])),
+    [places],
+  );
+
+  /** The places standing inside this one. */
+  const children = useMemo(
+    () => (box ? childrenOf(box.id, places) : []),
+    [box, places],
+  );
+
+  /** Everything this one stands inside, room end first. */
+  const ancestors = useMemo(
+    () => (box ? ancestorsOf(box, placesById) : []),
+    [box, placesById],
+  );
+
   /** What is in this box, and how many of each. */
   const contents = useMemo(
-    () => (box ? boxContents(box.id, placements, equipmentById) : []),
+    () => (box ? storageContents(box.id, placements, equipmentById) : []),
     [box, placements, equipmentById],
   );
 
@@ -114,6 +161,7 @@ export function BoxDetailPage() {
     if (!box) return;
     setDraftName((prev) => (prev === "" ? box.name : prev));
     setDraftLocation((prev) => (prev === "" ? box.location : prev));
+    setDraftKind((prev) => (prev === "" ? box.kind : prev));
   }, [box]);
 
   const locations = useMemo(
@@ -145,11 +193,15 @@ export function BoxDetailPage() {
   async function saveHeader() {
     if (!box) return;
     const name = draftName.trim() || box.name;
+    const kind = draftKind.trim() || box.kind;
     const location = draftLocation.trim() || box.location;
-    if (name === box.name && location === box.location) return;
+    if (name === box.name && location === box.location && kind === box.kind) return;
+
+    // A nested place takes its room from its parent, so sending a room for
+    // one would be overwritten by the database anyway. Don't pretend to set it.
     const { error } = await supabase
-      .from("equipment_boxes")
-      .update({ name, location })
+      .from("storage_places")
+      .update(box.parent_id ? { name, kind } : { name, kind, location })
       .eq("id", box.id);
     if (error) toast.error(error.message);
   }
@@ -203,14 +255,17 @@ export function BoxDetailPage() {
     if (!box) return;
     setDeleting(true);
     try {
-      const { error } = await supabase.rpc("delete_equipment_box", {
-        p_box_id: box.id,
+      const { error } = await supabase.rpc("delete_storage_place", {
+        p_storage_id: box.id,
         p_keep_contents: keepContents,
       });
       if (error) throw new Error(error.message);
+      const emptied = countWithin(box.id, places, placements);
       toast.success(
-        keepContents && contents.length > 0
-          ? `${box.name} removed — its ${contents.length === 1 ? "item is" : "items are"} now loose in ${box.location}`
+        keepContents && emptied > 0
+          ? `${box.name} removed — its ${
+              emptied === 1 ? "item is" : "items are"
+            } now loose in ${box.location}`
           : `${box.name} removed`,
       );
       navigate("/equipment");
@@ -231,7 +286,7 @@ export function BoxDetailPage() {
       // Setting it outright is what the number beside a row does.
       const { error } = await supabase.rpc("place_equipment", {
         p_equipment_id: item.id,
-        p_box_id: box.id,
+        p_storage_id: box.id,
         p_location: null,
         p_quantity: quantity,
         p_add: true,
@@ -276,7 +331,7 @@ export function BoxDetailPage() {
 
       const { error: placeError } = await supabase.rpc("place_equipment", {
         p_equipment_id: data.id,
-        p_box_id: box.id,
+        p_storage_id: box.id,
         p_location: null,
         p_quantity: quantity,
       });
@@ -292,6 +347,35 @@ export function BoxDetailPage() {
     }
   }
 
+  /**
+   * Put another place inside this one — a shelf in a cupboard, a box on it.
+   *
+   * No room is sent: the database derives it from the parent, so a nested
+   * place cannot drift into a different store from the thing holding it.
+   */
+  async function addPlace() {
+    if (!box) return;
+    const name = newPlace.trim();
+    if (!name) return;
+    setAddingPlace(true);
+    try {
+      const { error } = await supabase.from("storage_places").insert({
+        name,
+        kind: newPlaceKind.trim() || DEFAULT_KIND,
+        code: generateBoxCode(),
+        location: box.location,
+        parent_id: box.id,
+      });
+      if (error) throw new Error(error.message);
+      setNewPlace("");
+      toast.success(`${name} added inside ${box.name}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't add that place.");
+    } finally {
+      setAddingPlace(false);
+    }
+  }
+
   /** Change how many of something are in here; 0 takes it out of the box. */
   async function setPlacedQuantity(placement: EquipmentPlacement, quantity: number) {
     if (!box) return;
@@ -299,7 +383,7 @@ export function BoxDetailPage() {
     try {
       const { error } = await supabase.rpc("place_equipment", {
         p_equipment_id: placement.equipment_id,
-        p_box_id: box.id,
+        p_storage_id: box.id,
         p_location: null,
         p_quantity: quantity,
       });
@@ -311,23 +395,36 @@ export function BoxDetailPage() {
     }
   }
 
+  /** Everything in here and in everything inside it — what removing affects. */
+  const held = countWithin(box.id, places, placements);
+
   const checkedToday = contents.filter(
     ({ item }) => item.date_last_checked === format(new Date(), "yyyy-MM-dd"),
   ).length;
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Back into the room this box sits in, not to the top of the room
-          list. Coming out of a box you have just filled and having to find
-          your way back into the container is the kind of small tax that
-          stops people using the thing. */}
-      <Link
-        to={`/equipment?room=${encodeURIComponent(box.location)}`}
-        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" />
-        {box.location}
-      </Link>
+{/* The whole trail back, not just one step. Coming out of a box you
+          have just filled and having to find your way back down into the
+          cupboard is the kind of small tax that stops people using the
+          thing — and on a shelf three deep, "back to the room" is worse. */}
+      <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
+        <ArrowLeft className="size-4 shrink-0" />
+        <Link
+          to={`/equipment?room=${encodeURIComponent(box.location)}`}
+          className="hover:text-foreground hover:underline"
+        >
+          {box.location}
+        </Link>
+        {ancestors.map((up) => (
+          <span key={up.id} className="flex items-center gap-1">
+            <ChevronRight className="size-3 shrink-0 opacity-60" />
+            <Link to={`/boxes/${up.code}`} className="hover:text-foreground hover:underline">
+              {up.name}
+            </Link>
+          </span>
+        ))}
+      </nav>
 
       {/* Stacked on a phone. Side by side, the name and store fields and the
           code badge shared one 375px row and left each field 76px wide, which
@@ -349,34 +446,62 @@ export function BoxDetailPage() {
                   placeholder="Cooking box 1"
                 />
               </div>
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <Label htmlFor="box-location" className="text-xs text-muted-foreground">
-                  Store
+              <div className="flex w-full flex-col gap-1 sm:w-32">
+                <Label htmlFor="box-kind" className="text-xs text-muted-foreground">
+                  Kind
                 </Label>
                 <Input
-                  id="box-location"
-                  list="box-location-options"
-                  value={draftLocation}
-                  onChange={(e) => setDraftLocation(e.target.value)}
+                  id="box-kind"
+                  list="box-kind-options"
+                  value={draftKind}
+                  onChange={(e) => setDraftKind(e.target.value)}
                   onBlur={saveHeader}
                   disabled={blocked !== null}
-                  placeholder="Store Room"
+                  placeholder={DEFAULT_KIND}
                 />
-                <datalist id="box-location-options">
-                  {locations.map((l) => (
-                    <option key={l} value={l} />
+                <datalist id="box-kind-options">
+                  {KINDS.map((k) => (
+                    <option key={k} value={k} />
                   ))}
                 </datalist>
               </div>
+              {/* A nested place is wherever the thing holding it is, so there
+                  is nothing to choose: offering a store field here would let
+                  someone set a room the database immediately overwrites. */}
+              {box.parent_id === null && (
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <Label htmlFor="box-location" className="text-xs text-muted-foreground">
+                    Store
+                  </Label>
+                  <Input
+                    id="box-location"
+                    list="box-location-options"
+                    value={draftLocation}
+                    onChange={(e) => setDraftLocation(e.target.value)}
+                    onBlur={saveHeader}
+                    disabled={blocked !== null}
+                    placeholder="Store Room"
+                  />
+                  <datalist id="box-location-options">
+                    {locations.map((l) => (
+                      <option key={l} value={l} />
+                    ))}
+                  </datalist>
+                </div>
+              )}
             </div>
           ) : (
             <div>
               <h1>{box.name}</h1>
-              <p className="text-sm text-muted-foreground">{box.location}</p>
+              <p className="text-sm text-muted-foreground">
+                {box.kind} · {box.location}
+              </p>
             </div>
           )}
           <p className="text-sm text-muted-foreground">
-            {contents.length} {contents.length === 1 ? "item" : "items"}
+            {contents.length} {contents.length === 1 ? "item" : "items"} loose in here
+            {children.length > 0 &&
+              ` · ${children.length} ${children.length === 1 ? "place" : "places"} inside`}
             {checkedToday > 0 && ` · ${checkedToday} checked today`}
           </p>
         </div>
@@ -404,11 +529,100 @@ export function BoxDetailPage() {
         </div>
       </div>
 
-      {showQr && <BoxQrCode code={box.code} name={box.name} />}
+      {showQr && <StorageQrCode code={box.code} name={box.name} />}
+
+      {/* What stands inside this one, before what is loose in it. A cupboard
+          is mostly its shelves; the two mugs on top of it are the footnote. */}
+      {(children.length > 0 || canEdit) && (
+        <section className="flex flex-col gap-2">
+          {children.length > 0 && (
+            <>
+              <h2 className="text-sm text-muted-foreground">Inside {box.name}</h2>
+              <ul className="grid gap-2 sm:grid-cols-2">
+                {children.map((child) => {
+                  const inChild = countWithin(child.id, places, placements);
+                  const within = childrenOf(child.id, places).length;
+                  return (
+                    <li key={child.id}>
+                      <Link
+                        to={`/boxes/${child.code}`}
+                        className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3 transition-colors hover:bg-accent"
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <Package className="size-4 shrink-0 text-muted-foreground" />
+                          <span className="flex min-w-0 flex-col">
+                            <span className="truncate font-medium">{child.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {child.kind}
+                              {` · ${inChild} ${inChild === 1 ? "item" : "items"}`}
+                              {within > 0 &&
+                                ` · ${within} ${within === 1 ? "place" : "places"}`}
+                            </span>
+                          </span>
+                        </span>
+                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+
+          {/* Five deep is the database's limit, so the control goes away at
+              the bottom rather than offering a button that always errors.
+              Two rows on a phone: three controls across 375px left the name
+              box too narrow to read what you had typed into it. */}
+          {canEdit && ancestors.length < 4 && (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                placeholder={blocked ?? `Add a shelf or box inside ${box.name}…`}
+                value={newPlace}
+                onChange={(e) => setNewPlace(e.target.value)}
+                disabled={addingPlace || blocked !== null}
+              />
+              <div className="flex gap-2">
+                <Input
+                  list="new-place-kind-options"
+                  aria-label="What kind of place"
+                  className="flex-1 sm:w-28 sm:flex-none"
+                  value={newPlaceKind}
+                  onChange={(e) => setNewPlaceKind(e.target.value)}
+                  disabled={addingPlace || blocked !== null}
+                />
+                <datalist id="new-place-kind-options">
+                  {KINDS.map((k) => (
+                    <option key={k} value={k} />
+                  ))}
+                </datalist>
+                <Button
+                  variant="outline"
+                  className="shrink-0"
+                  disabled={addingPlace || blocked !== null || newPlace.trim() === ""}
+                  onClick={addPlace}
+                >
+                  <Plus className="size-4" />
+                  Add
+                </Button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {children.length > 0 && contents.length > 0 && (
+        <h2 className="text-sm text-muted-foreground">Loose in {box.name}</h2>
+      )}
 
       {contents.length === 0 ? (
         <div className="flex h-32 flex-col items-center justify-center gap-1 rounded-lg border border-dashed text-center text-sm text-muted-foreground">
-          <p>Nothing in this box yet.</p>
+          <p>
+            {children.length > 0
+              ? `Nothing loose in ${box.name} — it is all in the ${
+                  children.length === 1 ? "place" : "places"
+                } above.`
+              : `Nothing in this ${box.kind.toLowerCase()} yet.`}
+          </p>
           {canEdit && <p className="text-xs">Add what&apos;s in front of you, below.</p>}
         </div>
       ) : (
@@ -445,7 +659,7 @@ export function BoxDetailPage() {
                       type="number"
                       min={0}
                       inputMode="numeric"
-                      aria-label={`How many ${item.name} are in this box`}
+                      aria-label={`How many ${item.name} are in ${box.name}`}
                       className="h-8 w-16"
                       defaultValue={placement.quantity}
                       disabled={busy || blocked !== null}
@@ -486,7 +700,7 @@ export function BoxDetailPage() {
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">
             <Input
-              placeholder={blocked ?? "Add something in this box…"}
+              placeholder={blocked ?? `Add something in ${box.name}…`}
               value={newItem}
               onChange={(e) => setNewItem(e.target.value)}
               disabled={adding || blocked !== null}
@@ -547,17 +761,21 @@ export function BoxDetailPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove {box.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              {contents.length === 0
-                ? "The box is empty, so nothing else changes. Its sticker code stops working — scanning it again would make a new box."
-                : contents.length === 1
-                  ? `The item in it stays in the inventory and becomes loose in ${box.location}. Nothing is deleted except the box itself.`
-                  : `The ${contents.length} items in it stay in the inventory and become loose in ${box.location}. Nothing is deleted except the box itself.`}
+              {children.length > 0 &&
+                `The ${children.length === 1 ? "place" : "places"} inside it go too. `}
+              {held === 0
+                ? "Nothing is in there, so nothing else changes. The sticker code stops working — scanning it again would make a new place."
+                : `The ${held === 1 ? "item" : `${held} items`} in there ${
+                    held === 1 ? "stays" : "stay"
+                  } in the inventory and ${
+                    held === 1 ? "becomes" : "become"
+                  } loose in ${box.location}. Nothing is deleted from the inventory.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction disabled={deleting} onClick={() => removeBox(true)}>
-              Remove the box
+              Remove it
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

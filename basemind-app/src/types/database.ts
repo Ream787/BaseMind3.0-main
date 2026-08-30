@@ -171,12 +171,25 @@ export type PolicyChatMessage = {
 
 export type NewPolicyChatMessage = Omit<PolicyChatMessage, "id" | "created_at">;
 
-export type EquipmentBox = {
+/**
+ * Somewhere in a room that kit is kept: a box, a shelf, a cupboard, the
+ * trailer. They nest, so a cupboard can hold shelves.
+ */
+export type StoragePlace = {
   id: string;
   /** What the QR sticker encodes. Unique, case-insensitively. */
   code: string;
   name: string;
+  /** Box, Shelf, Cupboard, Crate, Trailer... free text on purpose. */
+  kind: string;
+  /**
+   * The room. Derived for a nested place — a shelf is wherever its cupboard
+   * is — and kept in step by the database, so it is never set by hand on a
+   * child.
+   */
   location: string;
+  /** What it sits inside. Null means it stands in the room itself. */
+  parent_id: string | null;
   notes: string | null;
   created_by: string | null;
   created_at: string;
@@ -184,27 +197,38 @@ export type EquipmentBox = {
 };
 
 /** Only the code is required; the database names and files a new box itself. */
-export type NewEquipmentBox = Omit<
-  EquipmentBox,
-  "id" | "created_at" | "updated_at" | "name" | "location" | "notes" | "created_by"
+export type NewStoragePlace = Omit<
+  StoragePlace,
+  | "id"
+  | "created_at"
+  | "updated_at"
+  | "name"
+  | "kind"
+  | "location"
+  | "parent_id"
+  | "notes"
+  | "created_by"
 > &
-  Partial<Pick<EquipmentBox, "name" | "location" | "notes" | "created_by">>;
+  Partial<
+    Pick<StoragePlace, "name" | "kind" | "location" | "parent_id" | "notes" | "created_by">
+  >;
 
-export type EquipmentBoxUpdate = Partial<
-  Pick<EquipmentBox, "name" | "location" | "notes">
+export type StoragePlaceUpdate = Partial<
+  Pick<StoragePlace, "name" | "kind" | "location" | "parent_id" | "notes">
 >;
 
 /**
  * How many of an item are in one place.
  *
- * Exactly one of box_id and location is set: kit is either in a box, or
- * loose in a room. A boxed placement takes its room from the box, so moving
- * a box moves everything in it without touching a single placement.
+ * Exactly one of storage_id and location is set: kit is either in a storage
+ * place, or loose in a room. A stored placement takes its room from that
+ * place, so moving a cupboard moves everything in it without touching a
+ * single placement.
  */
 export type EquipmentPlacement = {
   id: string;
   equipment_id: string;
-  box_id: string | null;
+  storage_id: string | null;
   location: string | null;
   quantity: number;
   created_at: string;
@@ -415,7 +439,7 @@ export type Database = {
         Partial<UserProfile>
       >;
       equipment: TableDef<Equipment, NewEquipment, EquipmentUpdate>;
-      equipment_boxes: TableDef<EquipmentBox, NewEquipmentBox, EquipmentBoxUpdate>;
+      storage_places: TableDef<StoragePlace, NewStoragePlace, StoragePlaceUpdate>;
       equipment_placements: TableDef<EquipmentPlacement, NewEquipmentPlacement>;
       equipment_checks: TableDef<EquipmentCheck, NewEquipmentCheck>;
       equipment_faults: TableDef<EquipmentFault, NewEquipmentFault, EquipmentFaultUpdate>;
@@ -446,7 +470,7 @@ export type Database = {
       place_equipment: {
         Args: {
           p_equipment_id: string;
-          p_box_id: string | null;
+          p_storage_id: string | null;
           p_location: string | null;
           p_quantity: number;
           /** true adds to what is there; false (default) sets it outright. */
@@ -454,8 +478,8 @@ export type Database = {
         };
         Returns: void;
       };
-      delete_equipment_box: {
-        Args: { p_box_id: string; p_keep_contents?: boolean };
+      delete_storage_place: {
+        Args: { p_storage_id: string; p_keep_contents?: boolean };
         Returns: void;
       };
       merge_equipment: {

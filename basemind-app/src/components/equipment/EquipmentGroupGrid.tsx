@@ -7,7 +7,11 @@ interface EquipmentGroupGridProps {
   items: Equipment[];
   groupBy: GroupBy;
   onSelect: (group: { key: string; name: string }) => void;
-  /** How many boxes each room holds, keyed the same way as the groups. */
+  /**
+   * How many storage places stand directly in each room, keyed the same way
+   * as the groups. Only the top level: the shelves inside a cupboard are
+   * counted on the cupboard, not again out here.
+   */
   boxCounts?: Map<string, number>;
   /** Rooms to list even with nothing loose in them yet. */
   alwaysShow?: { key: string; name: string }[];
@@ -61,7 +65,7 @@ export function EquipmentGroupGrid({
                 <span className="flex items-center gap-1 text-foreground">
                   <Box className="size-3.5" />
                   {boxCounts?.get(group.key)}{" "}
-                  {boxCounts?.get(group.key) === 1 ? "box" : "boxes"}
+                  {boxCounts?.get(group.key) === 1 ? "place" : "places"}
                 </span>
                 <span aria-hidden>·</span>
               </>

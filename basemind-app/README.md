@@ -5,6 +5,8 @@ Equipment, camp and food management for a single Scout group, with role-based ac
 ## What it does
 
 - **Equipment** — inventory browsable by room or by category, with condition tracking
+- **Storage places** — boxes, shelves and cupboards nested inside a room up to five deep,
+  each with a QR sticker, so "where is it" is answered down to the shelf
 - **Calendar** — camps, hikes and meetings on a month view, plus what's coming up
 - **Camping sites** — a directory of venues with phone numbers, addresses and descriptions
 - **Borrowing** — who has what, from which group, and when it's due back, with availability

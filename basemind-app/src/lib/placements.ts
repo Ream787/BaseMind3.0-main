@@ -1,9 +1,10 @@
 /**
  * Reading placements: where the units of a thing are, and how many.
  *
- * A placement is either "N in this box" or "N loose in this room". A boxed
- * placement has no room of its own — it inherits the box's — so moving a box
- * between stores moves everything in it without touching a placement. That is
+ * A placement is either "N in this storage place" or "N loose in this room".
+ * A stored placement has no room of its own — it inherits the place's, and
+ * that place inherits its parent's — so moving a cupboard between stores
+ * moves everything inside it without touching a single placement. That is
  * the whole reason the room isn't copied onto the row.
  *
  * Placements are not required to add up to the item's total. Kit sits in a
@@ -11,7 +12,7 @@
  * insisted on the sums balancing would force people to lie to it. The
  * difference is surfaced instead, as something to go and find.
  */
-import type { Equipment, EquipmentBox, EquipmentPlacement } from "@/types/database";
+import type { Equipment, EquipmentPlacement, StoragePlace } from "@/types/database";
 
 export const UNPLACED_LABEL = "Not placed yet";
 
@@ -20,14 +21,75 @@ export function roomKey(name: string): string {
   return name.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-/** The room a placement is in — its own, or the room of the box it's in. */
+/** The room a placement is in — its own, or the room of the place holding it. */
 export function roomOf(
   placement: EquipmentPlacement,
-  boxesById: Map<string, EquipmentBox>,
+  placesById: Map<string, StoragePlace>,
 ): string | null {
   if (placement.location !== null) return placement.location;
-  if (placement.box_id === null) return null;
-  return boxesById.get(placement.box_id)?.location ?? null;
+  if (placement.storage_id === null) return null;
+  return placesById.get(placement.storage_id)?.location ?? null;
+}
+
+/**
+ * A storage place and everything above it, room first.
+ *
+ * "Loft › Cupboard 1 › Top shelf" is what somebody needs to be told to find
+ * the thing; "Top shelf" on its own is useless in a group with four of them.
+ */
+export function pathOf(
+  place: StoragePlace,
+  placesById: Map<string, StoragePlace>,
+): string[] {
+  const names: string[] = [];
+  let current: StoragePlace | undefined = place;
+  // Bounded rather than "while there is a parent": the database prevents
+  // cycles, but a lost update or a stale cache should not spin the browser.
+  for (let depth = 0; current && depth < 10; depth++) {
+    names.unshift(current.name);
+    current = current.parent_id ? placesById.get(current.parent_id) : undefined;
+  }
+  return [place.location, ...names];
+}
+
+/**
+ * Everything a place sits inside, room end first.
+ *
+ * Used for the trail of links at the top of a place: standing in "Top shelf"
+ * you want one tap back to the cupboard, not a jump to the room and a hunt.
+ */
+export function ancestorsOf(
+  place: StoragePlace,
+  placesById: Map<string, StoragePlace>,
+): StoragePlace[] {
+  const chain: StoragePlace[] = [];
+  let current = place.parent_id ? placesById.get(place.parent_id) : undefined;
+  for (let depth = 0; current && depth < 10; depth++) {
+    chain.unshift(current);
+    current = current.parent_id ? placesById.get(current.parent_id) : undefined;
+  }
+  return chain;
+}
+
+/**
+ * The trail as one line, with the middle dropped when it is long.
+ *
+ * "Loft › Cupboard 1 › Top shelf › Box 3" does not fit in a table cell, and
+ * truncating it from the end cuts off the box — the one part you actually
+ * walk to. Keeping the room and the innermost place says where to go and
+ * what to look for; the steps between are on the place's own page.
+ */
+export function describePath(segments: string[]): string {
+  if (segments.length <= 3) return segments.join(" › ");
+  return `${segments[0]} › … › ${segments[segments.length - 1]}`;
+}
+
+/** Just the trail inside the room, without repeating the room itself. */
+export function pathInsideRoom(
+  place: StoragePlace,
+  placesById: Map<string, StoragePlace>,
+): string {
+  return pathOf(place, placesById).slice(1).join(" › ");
 }
 
 /** Index placements by the item they describe. */
@@ -49,7 +111,7 @@ export function placedQuantity(placements: EquipmentPlacement[] = []): number {
 }
 
 /**
- * How many are not in any box or room yet.
+ * How many are not in any storage place or room yet.
  *
  * Negative would mean the placements claim more than the group owns, which is
  * a data-entry slip rather than a real state, so it is clamped to zero and the
@@ -64,14 +126,14 @@ export function isOverPlaced(item: Equipment, placements: EquipmentPlacement[] =
   return placedQuantity(placements) > item.quantity;
 }
 
-/** The items in a box, with how many of each. */
-export function boxContents(
-  boxId: string,
+/** The items directly in one storage place, with how many of each. */
+export function storageContents(
+  storageId: string,
   placements: EquipmentPlacement[],
   equipmentById: Map<string, Equipment>,
 ): { item: Equipment; placement: EquipmentPlacement }[] {
   return placements
-    .filter((p) => p.box_id === boxId)
+    .filter((p) => p.storage_id === storageId)
     .map((placement) => {
       const item = equipmentById.get(placement.equipment_id);
       return item ? { item, placement } : null;
@@ -80,7 +142,38 @@ export function boxContents(
     .sort((a, b) => a.item.name.localeCompare(b.item.name));
 }
 
-/** Items loose in a room — in the room itself rather than in one of its boxes. */
+/** The places sitting directly inside this one. */
+export function childrenOf(placeId: string | null, places: StoragePlace[]): StoragePlace[] {
+  return places
+    .filter((p) => p.parent_id === placeId)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** A place, everything inside it, and everything inside those. */
+export function subtreeIds(placeId: string, places: StoragePlace[]): string[] {
+  const ids = [placeId];
+  for (let i = 0; i < ids.length && i < 500; i++) {
+    for (const child of places) {
+      if (child.parent_id === ids[i] && !ids.includes(child.id)) ids.push(child.id);
+    }
+  }
+  return ids;
+}
+
+/** How many item rows are in a place and everything nested inside it. */
+export function countWithin(
+  placeId: string,
+  places: StoragePlace[],
+  placements: EquipmentPlacement[],
+): number {
+  const within = new Set(subtreeIds(placeId, places));
+  return placements.filter((p) => p.storage_id && within.has(p.storage_id)).length;
+}
+
+/**
+ * Items loose in a room — in the room itself rather than in anything
+ * standing in it.
+ */
 export function looseInRoom(
   room: string,
   placements: EquipmentPlacement[],
@@ -97,20 +190,20 @@ export function looseInRoom(
     .sort((a, b) => a.item.name.localeCompare(b.item.name));
 }
 
-/** Every room that holds something, whether loose or in a box. */
+/** Every room that holds something, loose or stored. */
 export function roomsInUse(
   placements: EquipmentPlacement[],
-  boxes: EquipmentBox[],
+  places: StoragePlace[],
 ): { key: string; name: string }[] {
-  const boxesById = new Map(boxes.map((b) => [b.id, b]));
+  const placesById = new Map(places.map((p) => [p.id, p]));
   const rooms = new Map<string, string>();
 
-  for (const box of boxes) {
-    const name = box.location.trim();
+  for (const place of places) {
+    const name = place.location.trim();
     if (name) rooms.set(roomKey(name), name);
   }
   for (const placement of placements) {
-    const name = roomOf(placement, boxesById)?.trim();
+    const name = roomOf(placement, placesById)?.trim();
     if (name) rooms.set(roomKey(name), name);
   }
 
@@ -122,24 +215,30 @@ export function roomsInUse(
 /**
  * A one-line answer to "where is this?", for the inventory list.
  *
- * Boxes are named rather than reduced to their room: "Cooking box 1" is what
- * someone is about to go and open, and "Container" would send them to look at
- * a shelf of five identical crates.
+ * Written as a trail — "Loft › Cupboard 1 › Box 3 ×5" — because the name of
+ * a shelf means nothing on its own once a group has four of them, and the
+ * room alone would send somebody to look at a wall of identical crates. A
+ * deep trail keeps its two ends and drops the middle.
  */
 export function describePlacements(
   item: Equipment,
   placements: EquipmentPlacement[] = [],
-  boxesById: Map<string, EquipmentBox>,
+  placesById: Map<string, StoragePlace>,
 ): string {
   const parts = placements
     .map((p) => {
-      const where =
-        p.box_id !== null ? boxesById.get(p.box_id)?.name : (p.location ?? "").trim();
-      return where ? { where, quantity: p.quantity } : null;
+      if (p.storage_id !== null) {
+        const place = placesById.get(p.storage_id);
+        return place
+          ? { where: describePath(pathOf(place, placesById)), quantity: p.quantity }
+          : null;
+      }
+      const room = (p.location ?? "").trim();
+      return room ? { where: room, quantity: p.quantity } : null;
     })
     .filter((part): part is { where: string; quantity: number } => part !== null)
     .sort((a, b) => b.quantity - a.quantity || a.where.localeCompare(b.where))
-    .map((part) => `${part.where} ${part.quantity}`);
+    .map((part) => `${part.where} ×${part.quantity}`);
 
   // Nothing filed anywhere reads as a plain "Not placed yet". Appending the
   // count there produced "not placed yet 1", which states the obvious in the
@@ -147,7 +246,7 @@ export function describePlacements(
   if (parts.length === 0) return UNPLACED_LABEL;
 
   const spare = unplacedQuantity(item, placements);
-  if (spare > 0) parts.push(`${UNPLACED_LABEL.toLowerCase()} ${spare}`);
+  if (spare > 0) parts.push(`${UNPLACED_LABEL.toLowerCase()} ×${spare}`);
 
   return parts.join(" · ");
 }

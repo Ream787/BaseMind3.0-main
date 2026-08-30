@@ -18,8 +18,10 @@ import { EquipmentProvider } from "@/context/EquipmentContext";
 const EquipmentPage = lazy(() =>
   import("@/components/equipment/EquipmentPage").then((m) => ({ default: m.EquipmentPage })),
 );
-const BoxDetailPage = lazy(() =>
-  import("@/components/boxes/BoxDetailPage").then((m) => ({ default: m.BoxDetailPage })),
+const StoragePlacePage = lazy(() =>
+  import("@/components/storage/StoragePlacePage").then((m) => ({
+    default: m.StoragePlacePage,
+  })),
 );
 const RepairsPage = lazy(() =>
   import("@/components/equipment/RepairsPage").then((m) => ({ default: m.RepairsPage })),
@@ -124,7 +126,7 @@ export const router = createBrowserRouter([
         element: (
           <Gate feature="equipment">
             <EquipmentProvider>
-              <BoxDetailPage />
+              <StoragePlacePage />
             </EquipmentProvider>
           </Gate>
         ),

@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
  * damp stores and get scuffed, and a human-readable code means a scuffed one
  * can still be typed in rather than reprinted.
  */
-export function BoxQrCode({ code, name }: { code: string; name: string }) {
+export function StorageQrCode({ code, name }: { code: string; name: string }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
