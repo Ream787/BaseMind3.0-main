@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import {
+  ChevronRight,
   DownloadCloud,
   FileText,
   FolderTree,
@@ -47,7 +48,12 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { SectionTabs, ASSISTANT_TABS } from "@/components/layout/SectionTabs";
-import { groupPolicies, verifyFilings } from "@/lib/policySort";
+import {
+  categoriesInUse,
+  groupPolicies,
+  unfiled,
+  verifyFilings,
+} from "@/lib/policySort";
 
 /** Just the site name from a link, since the full URL never fits. */
 function hostOf(url: string): string {
@@ -73,6 +79,9 @@ export function PoliciesPage() {
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [sorting, setSorting] = useState(false);
   const [bulk, setBulk] = useState<{ done: number; total: number } | null>(null);
+  // Which shelves are folded shut. Empty means everything is open, so a
+  // first visit shows the documents rather than a row of closed drawers.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   // Adding a policy changes what the assistant tells everyone, so it's held
   // to Manager and above — the same bar as the database enforces.
@@ -192,6 +201,8 @@ export function PoliciesPage() {
     [policies],
   );
 
+  const linked = useMemo(() => policies.filter((p) => p.source_url), [policies]);
+
   /**
    * Fetches every document that has a link but no text yet.
    *
@@ -209,7 +220,15 @@ export function PoliciesPage() {
    * others are still worth having.
    */
   async function downloadMissing() {
-    const queue = missingText;
+    await fetchAll(missingText);
+  }
+
+  /** Re-downloads everything with a link, whether it has text or not. */
+  async function reloadAll() {
+    await fetchAll(linked);
+  }
+
+  async function fetchAll(queue: Policy[]) {
     if (queue.length === 0) return;
 
     setBulk({ done: 0, total: queue.length });
@@ -248,21 +267,36 @@ export function PoliciesPage() {
   /**
    * Files the documents into categories.
    *
-   * Applied straight away rather than shown as suggestions first: a category
-   * is a label on a shelf, and putting it back is one dropdown away. That is
-   * a very different risk from merging two rows together, which is why this
-   * doesn't ask and the equipment tidy-up does.
+   * Only documents with no group are touched — one you have already filed
+   * stays where you put it. New groups are allowed where nothing fits, but
+   * the shelves that already exist are sent along so it reaches for those
+   * first.
+   *
+   * Applied straight away rather than shown as suggestions: a group is a
+   * label, and moving it back is one dropdown away. Merging two equipment
+   * rows is not, which is why that one asks and this doesn't.
    */
   async function sortIntoCategories() {
+    // Only the ones with nowhere to be. A document already filed is
+    // somebody's decision, and re-filing it would quietly undo that.
+    const toFile = unfiled(policies);
+    if (toFile.length === 0) {
+      toast.success("Everything already has a group.");
+      return;
+    }
+
     setSorting(true);
     try {
       const { data, error } = await supabase.functions.invoke("policy-sort", {
         body: {
-          documents: policies.map((p) => ({
+          documents: toFile.map((p) => ({
             title: p.title,
             // The opening is enough to tell what a policy is about.
             excerpt: p.content.slice(0, 400),
           })),
+          // The shelves that exist, so it puts things on those rather than
+          // inventing a parallel set.
+          inUse: categoriesInUse(policies),
         },
       });
       if (error) {
@@ -273,7 +307,7 @@ export function PoliciesPage() {
 
       const filings = verifyFilings(data?.filed ?? [], policies);
       if (filings.length === 0) {
-        toast.success("Everything is already filed sensibly.");
+        toast.success("Nothing new to file.");
         return;
       }
 
@@ -284,10 +318,12 @@ export function PoliciesPage() {
           .eq("id", filing.policyId);
         if (updateError) throw new Error(updateError.message);
       }
+      const fresh = filings.filter((f) => f.isNewCategory).length;
       toast.success(
         filings.length === 1
           ? `Filed "${filings[0].title}" under ${filings[0].category}`
-          : `Filed ${filings.length} documents`,
+          : `Filed ${filings.length} documents` +
+              (fresh > 0 ? ` · ${fresh} new ${fresh === 1 ? "group" : "groups"}` : ""),
       );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't sort those.");
@@ -296,8 +332,19 @@ export function PoliciesPage() {
     }
   }
 
+  /**
+   * Opens the actual PDF.
+   *
+   * Our stored copy when there is one, otherwise the original link. A
+   * bulk-added document has a link long before anyone has downloaded it, and
+   * "you cannot read this yet" would be a strange thing to say about a file
+   * that is one click away on the Scouts website.
+   */
   async function openOriginal(policy: Policy) {
-    if (!policy.storage_path) return;
+    if (!policy.storage_path) {
+      if (policy.source_url) window.open(policy.source_url, "_blank", "noopener,noreferrer");
+      return;
+    }
     setOpening(policy.id);
     const { data, error } = await supabase.storage
       .from("policies")
@@ -344,6 +391,21 @@ export function PoliciesPage() {
                 if (file) handleUpload(file);
               }}
             />
+            {linked.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={reloadAll}
+                disabled={bulk !== null || !online}
+                title={
+                  online
+                    ? "Fetch every linked document again, replacing what we hold"
+                    : "Needs a connection"
+                }
+              >
+                <RefreshCw className={`size-4 ${bulk ? "animate-spin" : ""}`} />
+                Reload all ({linked.length})
+              </Button>
+            )}
             {missingText.length > 0 && (
               <Button
                 onClick={downloadMissing}
@@ -443,13 +505,30 @@ export function PoliciesPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-5">
-            {groupPolicies(filtered).map((group) => (
+            {groupPolicies(filtered).map((group) => {
+              const shut = collapsed.has(group.category);
+              return (
               <section key={group.category} className="flex flex-col gap-2">
-                <h3 className="text-sm font-medium text-muted-foreground">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCollapsed((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(group.category)) next.delete(group.category);
+                      else next.add(group.category);
+                      return next;
+                    })
+                  }
+                  aria-expanded={!shut}
+                  className="flex items-center gap-1.5 self-start text-sm font-medium text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronRight
+                    className={`size-4 transition-transform ${shut ? "" : "rotate-90"}`}
+                  />
                   {group.category}
-                  <span className="ml-2 font-normal">{group.policies.length}</span>
-                </h3>
-                <ul className="flex flex-col gap-2">
+                  <span className="font-normal">{group.policies.length}</span>
+                </button>
+                <ul className={`flex flex-col gap-2 ${shut ? "hidden" : ""}`}>
                   {group.policies.map((policy) => (
               <li key={policy.id} className="rounded-lg border bg-card p-3">
                 <div className="flex items-start justify-between gap-3">
@@ -474,12 +553,18 @@ export function PoliciesPage() {
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     {policy.category && <Badge variant="outline">{policy.category}</Badge>}
-                    {policy.storage_path && (
+                    {(policy.storage_path || policy.source_url) && (
                       <Button
                         variant="ghost"
                         size="sm"
                         disabled={opening === policy.id || !online}
-                        title={online ? undefined : "Needs a connection — the file lives on the server"}
+                        title={
+                          !online
+                            ? "Needs a connection"
+                            : policy.storage_path
+                              ? "Open our copy"
+                              : "Open the original on scouts.org.za"
+                        }
                         onClick={() => openOriginal(policy)}
                       >
                         Open
@@ -519,7 +604,8 @@ export function PoliciesPage() {
                   ))}
                 </ul>
               </section>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

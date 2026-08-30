@@ -1,18 +1,23 @@
 /**
  * Filing policy documents onto labelled shelves.
  *
- * The categories are a fixed list rather than whatever the model thinks of.
- * Left to invent them it produces "Safety", "Safeguarding" and "Child Safety"
- * as three separate shelves, which is worse than no grouping at all.
+ * TWO RULES, and both matter more than they look.
  *
- * Nothing the model returns is trusted: a title has to match a document that
- * exists, and a category has to be one of these. Anything else is dropped
- * rather than applied, because a document filed under a shelf nobody can see
- * is a document that has gone missing.
+ * It only ever touches documents with NO category. A filing that could
+ * overwrite one somebody chose is a filing that quietly undoes their work,
+ * and there is no way to tell from the outside whether "Safety" was the
+ * model's guess last week or a decision this morning. So a document that has
+ * been filed is left exactly where it is.
+ *
+ * A category it proposes may be one already in use or a genuinely new one,
+ * but a new one that differs from an existing category only by case or
+ * spacing is snapped to the existing spelling. Otherwise a shelf splits into
+ * "Safety" and "safety" and neither has everything on it.
  */
 import type { Policy } from "@/types/database";
 
-export const POLICY_CATEGORIES = [
+/** Offered as a starting point when nothing has been filed yet. */
+export const SUGGESTED_CATEGORIES = [
   "Safety",
   "Young people",
   "Activities",
@@ -20,40 +25,64 @@ export const POLICY_CATEGORIES = [
   "Transport",
   "Money",
   "Running the group",
-  "Other",
 ] as const;
 
-export type PolicyCategory = (typeof POLICY_CATEGORIES)[number];
-
-/** Where "Other" and anything unfiled sorts to: the bottom. */
-const ORDER = new Map<string, number>(POLICY_CATEGORIES.map((c, i) => [c, i]));
+/** Sort order for the suggested ones; anything else follows them. */
+const ORDER = new Map<string, number>(SUGGESTED_CATEGORIES.map((c, i) => [c, i]));
 
 const norm = (v: string) => v.replace(/\s+/g, " ").trim().toLowerCase();
+
+/** A category name has to be short enough to be a label on a shelf. */
+const MAX_CATEGORY_LENGTH = 40;
 
 export type RawFiling = { title?: unknown; category?: unknown };
 
 export type Filing = {
   policyId: string;
   title: string;
-  category: PolicyCategory;
-  /** What it was filed under before, so the change can be described. */
-  previous: string | null;
+  category: string;
+  /** True when this shelf doesn't exist yet, so the UI can say so. */
+  isNewCategory: boolean;
 };
+
+/** Every category currently in use, in the spelling it is written in. */
+export function categoriesInUse(policies: Policy[]): string[] {
+  const seen = new Map<string, string>();
+  for (const policy of policies) {
+    const value = policy.category?.trim();
+    if (value && !seen.has(norm(value))) seen.set(norm(value), value);
+  }
+  return [...seen.values()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+}
+
+/** Documents with nowhere to be: the only ones filing may touch. */
+export function unfiled(policies: Policy[]): Policy[] {
+  return policies.filter((p) => !p.category?.trim());
+}
 
 /**
  * Checks the model's filing against the real shelf.
  *
- * Only documents that exist, only categories from the list, and only where
- * the category would actually change something — re-filing a document to
- * where it already is is not a suggestion, it is noise.
+ * Survives only if: the title is a document that exists, that document has no
+ * category yet, and the category is a usable label. Anything else is dropped
+ * rather than applied — a document filed onto a shelf nobody can see is a
+ * document that has gone missing.
  */
 export function verifyFilings(raw: RawFiling[], policies: Policy[]): Filing[] {
-  const byTitle = new Map<string, Policy>();
-  for (const policy of policies) {
-    if (!byTitle.has(norm(policy.title))) byTitle.set(norm(policy.title), policy);
+  // Only unfiled documents are candidates. Building the index from these
+  // alone is what makes overwriting an existing category impossible here,
+  // rather than merely unlikely.
+  const candidates = new Map<string, Policy>();
+  for (const policy of unfiled(policies)) {
+    if (!candidates.has(norm(policy.title))) candidates.set(norm(policy.title), policy);
   }
 
-  const valid = new Set<string>(POLICY_CATEGORIES);
+  const existing = new Map<string, string>();
+  for (const category of categoriesInUse(policies)) existing.set(norm(category), category);
+  for (const category of SUGGESTED_CATEGORIES) {
+    if (!existing.has(norm(category))) existing.set(norm(category), category);
+  }
+
   const seen = new Set<string>();
   const out: Filing[] = [];
 
@@ -61,20 +90,26 @@ export function verifyFilings(raw: RawFiling[], policies: Policy[]): Filing[] {
     if (!item || typeof item !== "object") continue;
     if (typeof item.title !== "string" || typeof item.category !== "string") continue;
 
-    const policy = byTitle.get(norm(item.title));
+    const policy = candidates.get(norm(item.title));
     if (!policy || seen.has(policy.id)) continue;
 
-    const category = item.category.trim();
-    if (!valid.has(category)) continue;
-    if (norm(policy.category ?? "") === norm(category)) continue;
+    const proposed = item.category.replace(/\s+/g, " ").trim();
+    if (!proposed || proposed.length > MAX_CATEGORY_LENGTH) continue;
+
+    // Snap to the spelling already in use, so a shelf never splits in two
+    // over capitalisation.
+    const match = existing.get(norm(proposed));
+    const category = match ?? proposed;
 
     seen.add(policy.id);
     out.push({
       policyId: policy.id,
       title: policy.title,
-      category: category as PolicyCategory,
-      previous: policy.category,
+      category,
+      isNewCategory: !match,
     });
+    // A brand new shelf becomes an existing one for the rest of this batch.
+    if (!match) existing.set(norm(category), category);
   }
 
   return out;
@@ -85,10 +120,10 @@ export type PolicyGroup = { category: string; policies: Policy[] };
 /**
  * Groups the shelf for display.
  *
- * Known categories keep the order they are listed in, which runs roughly from
- * "someone could get hurt" to "paperwork". Anything else — a category typed by
- * hand before this existed — sorts after them alphabetically, and unfiled
- * documents come last, because they are the ones needing attention.
+ * The suggested categories keep the order they are listed in, which runs
+ * roughly from "someone could get hurt" to "paperwork". Categories somebody
+ * made up follow them alphabetically, and unfiled documents come last,
+ * because those are the ones needing attention.
  */
 export function groupPolicies(policies: Policy[]): PolicyGroup[] {
   const groups = new Map<string, Policy[]>();
