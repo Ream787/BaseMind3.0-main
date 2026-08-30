@@ -1,15 +1,16 @@
 /**
- * Signing in with a username instead of an email.
+ * Usernames, and how they get you signed in.
  *
- * Supabase Auth is built around an email, so every account has one
- * underneath. For an account registered without one, the app derives a fixed
- * address from the username and uses that. Nothing is ever sent to it.
+ * Every account has a real email address, and that address is what Supabase
+ * Auth authenticates against. A username therefore has to be turned into an
+ * address before anyone can sign in — and that lookup deliberately does NOT
+ * happen here.
  *
- * `.invalid` is reserved by the IETF precisely so it can never resolve, which
- * makes it impossible for a derived address to collide with somebody's real
- * one. A made-up domain like basemind.local could be registered tomorrow.
+ * An endpoint the app could ask "which email owns this username" would be a
+ * way to read every member's email address out of the group, so the resolving
+ * and the sign-in both happen inside the `sign-in` Edge Function, which hands
+ * back a session and never the address.
  */
-const DERIVED_DOMAIN = "basemind.invalid";
 
 /** What a username may contain. Deliberately narrow. */
 const USERNAME_PATTERN = /^[a-z0-9](?:[a-z0-9_.-]{1,28}[a-z0-9])$/;
@@ -31,27 +32,13 @@ export function looksLikeEmail(value: string): boolean {
   return value.trim().includes("@");
 }
 
-/** The address an email-less account signs in with. */
-export function derivedEmail(username: string): string {
-  return `${normaliseUsername(username)}@${DERIVED_DOMAIN}`;
-}
-
-/** True for an address this app made up, rather than one a person gave. */
-export function isDerivedEmail(email: string | null): boolean {
-  return !!email && email.trim().toLowerCase().endsWith(`@${DERIVED_DOMAIN}`);
-}
-
 /**
- * The address to hand to Supabase for whatever somebody typed.
- *
- * An email is used as it stands. Anything else is treated as a username and
- * mapped to its derived address — which is why a username sign-in works
- * without the app having to look up anybody's real email address first, and
- * so without any way to ask the server "who owns this username".
+ * Addresses this app derived for itself during a brief window when an email
+ * was optional. `.invalid` can never resolve, so nothing was ever sent to
+ * one. Recognised only so such an account is never shown as having an email.
  */
-export function signInEmailFor(identifier: string): string {
-  const value = identifier.trim();
-  return looksLikeEmail(value) ? value.toLowerCase() : derivedEmail(value);
+export function isDerivedEmail(email: string | null): boolean {
+  return !!email && email.trim().toLowerCase().endsWith("@basemind.invalid");
 }
 
 /** What to show instead of an address the app invented. */

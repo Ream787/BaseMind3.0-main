@@ -3,7 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 
 import { supabase } from "@/lib/supabase/client";
 import { idbGet, idbSet, idbDelete } from "@/lib/offline/db";
-import { signInEmailFor } from "@/lib/usernames";
+import { looksLikeEmail } from "@/lib/usernames";
 import type { Role, UserProfile } from "@/types/database";
 
 const profileKey = (userId: string) => `profile:${userId}`;
@@ -106,11 +106,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function login(identifier: string, password: string) {
     setError(null);
-    // A username maps to a fixed derived address, so this works without ever
-    // asking the server who owns a username — which would be a way to read
-    // people's email addresses out of the app.
-    const email = signInEmailFor(identifier);
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    const typed = identifier.trim();
+
+    // A username can't be turned into an address here: doing so would need an
+    // endpoint that answers "which email owns this username", and that is a
+    // way to read every member's address out of the app. The Edge Function
+    // resolves it and signs in server-side, handing back only a session.
+    if (!looksLikeEmail(typed)) {
+      const message = await loginWithUsername(typed, password);
+      if (message) setError(message);
+      return message;
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: typed.toLowerCase(),
+      password,
+    });
     if (signInError) {
       // Signing in genuinely needs the server; say so plainly rather than
       // reporting it as a rejected password.
@@ -123,6 +134,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return message;
     }
     return null;
+  }
+
+  /** Signs in by username, via the function that can resolve one. */
+  async function loginWithUsername(username: string, password: string) {
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke("sign-in", {
+        body: { username, password },
+      });
+
+      if (fnError) {
+        const context = (fnError as { context?: Response }).context;
+        const body = await context?.json().catch(() => null);
+        return body?.error ?? "That username or password isn't right.";
+      }
+      if (!data?.access_token || !data?.refresh_token) {
+        return "That username or password isn't right.";
+      }
+
+      // Installing the tokens is what actually signs this browser in; from
+      // here the session is identical to one made with an email address.
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+      });
+      return sessionError ? sessionError.message : null;
+    } catch (err) {
+      return err instanceof Error && /fetch|network|timeout/i.test(err.message)
+        ? "Can't reach the server. Check your connection and try again."
+        : "That username or password isn't right.";
+    }
   }
 
   async function logout() {
