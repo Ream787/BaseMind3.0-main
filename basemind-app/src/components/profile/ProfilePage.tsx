@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { IconPicker } from "@/components/profile/IconPicker";
+import { isValidUsername, normaliseUsername, USERNAME_RULE } from "@/lib/usernames";
 
 export function ProfilePage() {
   const { profile, session, patchProfile } = useAuth();
@@ -18,7 +19,9 @@ export function ProfilePage() {
   const { theme, toggleTheme } = useTheme();
 
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [phone, setPhone] = useState("");
+  const [detailsError, setDetailsError] = useState<string | null>(null);
   const [savingDetails, setSavingDetails] = useState(false);
 
   const [password, setPassword] = useState("");
@@ -28,27 +31,54 @@ export function ProfilePage() {
 
   useEffect(() => {
     setName(profile?.name ?? "");
+    setUsername(profile?.username ?? "");
     setPhone(profile?.phone ?? "");
   }, [profile]);
 
   if (!profile) return null;
 
   const detailsChanged =
-    name.trim() !== (profile.name ?? "") || phone.trim() !== (profile.phone ?? "");
+    name.trim() !== (profile.name ?? "") ||
+    normaliseUsername(username) !== (profile.username ?? "") ||
+    phone.trim() !== (profile.phone ?? "");
 
   async function saveDetails(e: FormEvent) {
     e.preventDefault();
+
+    const handle = normaliseUsername(username);
+    if (!isValidUsername(handle)) {
+      setDetailsError(`That username won't work. ${USERNAME_RULE}`);
+      return;
+    }
+
+    setDetailsError(null);
     setSavingDetails(true);
     // role and status are deliberately absent: the database trigger reverts
     // them for anyone who isn't an admin, so sending them would silently
     // achieve nothing.
     const { error } = await supabase
       .from("users")
-      .update({ name: name.trim(), phone: phone.trim() || null })
+      .update({ name: name.trim(), username: handle, phone: phone.trim() || null })
       .eq("id", profile!.id);
     setSavingDetails(false);
-    if (error) toast.error(error.message);
-    else toast.success("Your details were saved");
+
+    if (error) {
+      // 23505 is the unique index on lower(username). Say what it means
+      // rather than showing the constraint name.
+      setDetailsError(
+        error.code === "23505"
+          ? `Somebody already goes by "${handle}". Pick another.`
+          : error.message,
+      );
+      return;
+    }
+
+    const changedUsername = handle !== (profile!.username ?? "");
+    toast.success(
+      changedUsername
+        ? `Saved — you now sign in as "${handle}"`
+        : "Your details were saved",
+    );
   }
 
   async function changePassword(e: FormEvent) {
@@ -103,6 +133,24 @@ export function ProfilePage() {
             />
           </div>
           <div className="flex flex-col gap-2">
+            <Label htmlFor="profile-username">Username</Label>
+            <Input
+              id="profile-username"
+              required
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="username"
+              disabled={!online}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {USERNAME_RULE} You sign in with this or your email
+              {profile.email ? ` (${profile.email})` : ""}, so changing it changes how you
+              sign in.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
             <Label htmlFor="profile-phone">Phone</Label>
             <Input
               id="profile-phone"
@@ -112,6 +160,7 @@ export function ProfilePage() {
               onChange={(e) => setPhone(e.target.value)}
             />
           </div>
+          {detailsError && <p className="text-sm text-destructive">{detailsError}</p>}
           <Button
             type="submit"
             className="self-start"
