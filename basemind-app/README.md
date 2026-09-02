@@ -206,6 +206,33 @@ always confirm an address manually from the SQL Editor:
 update auth.users set email_confirmed_at = now() where email = 'you@example.com';
 ```
 
+### 6b. Where confirmation links point, and who sends them
+
+Two settings, in two different places, and a link is broken if either is wrong.
+
+**Where the link lands** — Authentication → URL Configuration:
+
+- **Site URL** must be the full origin *including the scheme*: `https://www.basemind.co.za`,
+  not `www.basemind.co.za`. Without it Supabase treats the value as a path and the link
+  redirects to `https://<project>.supabase.co/www.basemind.co.za`, which is a 404 on somebody
+  else's domain.
+- **Redirect URLs** must list `https://www.basemind.co.za/**`. The app asks to come back to
+  `/auth/callback`; anything not matching this list is silently ignored in favour of the Site
+  URL, which is a failure with no error message anywhere.
+
+**Who sends it** — Project Settings → Authentication → SMTP Settings. The built-in sender is
+rate-limited to a couple of emails an hour and is not meant for real use, so a group of any
+size needs its own. Any transactional provider works; the domain has to be verified with the
+provider first, which means adding SPF, DKIM and DMARC records at whoever runs the domain's
+DNS.
+
+Send from a subdomain (`send.basemind.co.za`) rather than the root. The root's MX records
+belong to wherever the group actually reads mail, and a sending subdomain keeps the two from
+interfering — including when a provider asks for its own MX record to handle bounces.
+
+Set the sender address to something that exists. `noreply@` is conventional, but replies and
+bounce reports go somewhere, and "somewhere" should not be a mailbox nobody has created.
+
 ### 7. Create the first Admin
 
 There's no admin yet to approve the first signup, so:
