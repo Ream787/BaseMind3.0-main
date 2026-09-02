@@ -10,6 +10,7 @@ import { TermsPage } from "@/components/legal/TermsPage";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { RegisterPage } from "@/components/auth/RegisterPage";
 import { PendingApprovalPage } from "@/components/auth/PendingApprovalPage";
+import { AuthCallbackPage } from "@/components/auth/AuthCallbackPage";
 import { EquipmentProvider } from "@/context/EquipmentContext";
 
 // Auth pages stay eagerly loaded — they're the first thing anyone sees, so
@@ -100,6 +101,10 @@ export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage />, errorElement: <RouteError /> },
   { path: "/register", element: <RegisterPage />, errorElement: <RouteError /> },
   { path: "/pending", element: <PendingApprovalPage />, errorElement: <RouteError /> },
+  // Where a confirmation email comes back to. Eager like the rest of the
+  // auth pages: it is the first thing a new member ever loads, and a
+  // spinner while a chunk downloads reads as another broken link.
+  { path: "/auth/callback", element: <AuthCallbackPage />, errorElement: <RouteError /> },
   { path: "/terms", element: <TermsPage />, errorElement: <RouteError /> },
   {
     path: "/",

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
+import { readAuthRedirect } from "@/lib/authRedirect";
 import { useTheme } from "@/context/ThemeContext";
 import { useFeatures } from "@/context/FeaturesContext";
 import { Button } from "@/components/ui/button";
@@ -75,7 +76,18 @@ export function AppLayout() {
     );
   }
 
-  if (!session) return <Navigate to="/login" replace />;
+  // A confirmation link that came back broken can land here rather than on
+  // the callback page, because Supabase falls back to the site root whenever
+  // the app's own callback URL isn't in its allow list. Going straight to
+  // /login would drop the fragment, and with it the only account of what
+  // went wrong.
+  if (!session) {
+    return readAuthRedirect(window.location.href) ? (
+      <Navigate to={`/auth/callback${window.location.hash}`} replace />
+    ) : (
+      <Navigate to="/login" replace />
+    );
+  }
   if (!profile || profile.status !== "Active") return <Navigate to="/pending" replace />;
 
   const isAdmin = profile.role === "Admin";

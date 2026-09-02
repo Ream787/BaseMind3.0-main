@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Navigate, Link, useNavigate } from "react-router";
 
 import { supabase } from "@/lib/supabase/client";
+import { confirmRedirectUrl } from "@/lib/authRedirect";
 import { isValidUsername, normaliseUsername, USERNAME_RULE } from "@/lib/usernames";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,10 @@ export function RegisterPage() {
       password,
       options: {
         data: { name, username: handle, phone: phone || undefined },
+        // Without this the link in the email comes back to whatever the
+        // Supabase project calls its Site URL, which starts life as
+        // localhost:3000 — a dead page on the phone someone is holding.
+        emailRedirectTo: confirmRedirectUrl(window.location.origin),
       },
     });
 
