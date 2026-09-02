@@ -226,9 +226,12 @@ size needs its own. Any transactional provider works; the domain has to be verif
 provider first, which means adding SPF, DKIM and DMARC records at whoever runs the domain's
 DNS.
 
-Send from a subdomain (`send.basemind.co.za`) rather than the root. The root's MX records
+Send from a subdomain (`accounts.basemind.co.za`) rather than the root. The root's MX records
 belong to wherever the group actually reads mail, and a sending subdomain keeps the two from
-interfering — including when a provider asks for its own MX record to handle bounces.
+interfering — including when a provider asks for its own MX record to handle bounces. The
+sending address then has to be on that subdomain: a provider that has verified
+`accounts.basemind.co.za` will refuse mail from `noreply@basemind.co.za`, because as far as it
+is concerned that is somebody else's domain.
 
 Set the sender address to something that exists. `noreply@` is conventional, but replies and
 bounce reports go somewhere, and "somewhere" should not be a mailbox nobody has created.

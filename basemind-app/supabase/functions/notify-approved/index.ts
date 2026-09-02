@@ -19,9 +19,10 @@
 // "notify-approved", paste this file. Then set its secrets:
 //
 //   RESEND_API_KEY  the key from resend.com/api-keys, starting "re_"
-//   EMAIL_FROM      an address on a domain verified with Resend, e.g.
-//                   "noreply@basemind.co.za". A display name is added if
-//                   you don't write one.
+//   EMAIL_FROM      an address on a domain verified with Resend — the
+//                   SENDING subdomain, e.g. "noreply@accounts.basemind.co.za",
+//                   not the bare domain, which Resend has never heard of. A
+//                   display name is added if you don't write one.
 //   APP_URL         where the button points: "https://www.basemind.co.za",
 //                   scheme and all.
 //   EMAIL_REPLY_TO  optional. Worth setting to a mailbox somebody reads,
