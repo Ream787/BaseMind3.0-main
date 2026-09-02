@@ -7,6 +7,7 @@ import { isValidUsername, normaliseUsername, USERNAME_RULE } from "@/lib/usernam
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { OAuthButtons } from "@/components/auth/OAuthButtons";
 import { Label } from "@/components/ui/label";
 import {
   Card,
@@ -174,6 +175,10 @@ export function RegisterPage() {
             <Button type="submit" className="w-full" disabled={submitting}>
               {submitting ? "Creating account…" : "Create account"}
             </Button>
+            {/* Same buttons as signing in, because to a provider they are
+                the same action: there is no separate "register with Google",
+                only arriving with an account we haven't seen before. */}
+            <OAuthButtons />
             <p className="text-sm text-muted-foreground">
               Already have an account?{" "}
               <Link to="/login" className="text-primary underline">

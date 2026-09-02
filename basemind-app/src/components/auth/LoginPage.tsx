@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useOffline } from "@/context/OfflineContext";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/ui/logo";
+import { OAuthButtons } from "@/components/auth/OAuthButtons";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -107,6 +108,7 @@ export function LoginPage() {
             <Button type="submit" className="w-full" disabled={submitting}>
               {submitting ? "Signing in…" : "Sign in"}
             </Button>
+            <OAuthButtons />
             <p className="text-sm text-muted-foreground">
               Don&apos;t have an account?{" "}
               <Link to="/register" className="text-primary underline">

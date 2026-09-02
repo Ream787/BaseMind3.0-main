@@ -236,6 +236,38 @@ is concerned that is somebody else's domain.
 Set the sender address to something that exists. `noreply@` is conventional, but replies and
 bounce reports go somewhere, and "somewhere" should not be a mailbox nobody has created.
 
+### 6c. Optional: Google and Apple sign-in
+
+The buttons appear on their own. The login page asks the auth server which
+providers are switched on and shows only those, so turning one on in the dashboard
+is the whole deployment step — and a provider nobody has configured is never a
+button that fails when it is finally pressed.
+
+Whichever you set up, the redirect URI both providers need is Supabase's, not the
+app's:
+
+```
+https://<project-ref>.supabase.co/auth/v1/callback
+```
+
+**Google.** In the Google Cloud console, configure the OAuth consent screen, then
+create an OAuth client ID of type *Web application* and give it that redirect URI.
+Paste the client ID and secret into Authentication → Providers → Google.
+
+**Apple** needs a paid Apple Developer account, and rather more of them: an App ID,
+a Services ID (that is the client ID), the app's domain and return URL registered
+against it, and a Sign in with Apple key. Supabase generates the client secret
+itself given the team ID, key ID and the `.p8`. Apple sends a person's name only on
+the very first authorisation and never again, and may hand over a
+`privaterelay.appleid.com` address instead of a real one — both are handled, but
+the second means an admin approving the account sees a relay address rather than
+something recognisable.
+
+Signing in with a provider creates a Pending account exactly like the form does. A
+Google account proves an email address and nothing else — it says nothing about
+whether the person is in the group — so an admin still approves them, and the
+approval email still goes out.
+
 ### 7. Create the first Admin
 
 There's no admin yet to approve the first signup, so:
