@@ -19,6 +19,12 @@ export type UserProfile = {
   avatar_emblem: string | null;
   /** Chosen hue, 1-8; null means "work it out from the id". */
   avatar_colour: number | null;
+  /**
+   * When we told them they were approved. Null means we haven't — including
+   * after a rejection, which forgets it, so being let back in is announced
+   * again. Only the notify-approved function writes this.
+   */
+  approval_emailed_at: string | null;
   created_at: string;
   updated_at: string;
 };

@@ -79,9 +79,33 @@ export function UserManagementPage() {
     return data;
   }
 
+  /**
+   * Let someone know they're in.
+   *
+   * Deliberately after the approval and deliberately unable to undo it: the
+   * account really is active either way, and refusing to approve somebody
+   * because a mail server was busy would be the app breaking itself over a
+   * courtesy. A failure says so, and the same approval can be re-sent by
+   * approving again.
+   */
+  async function tellThem(user: UserProfile) {
+    const { data, error } = await supabase.functions.invoke("notify-approved", {
+      body: { userId: user.id },
+    });
+    if (error) {
+      toast.warning(`Approved, but couldn't email ${user.name || user.email}`, {
+        description: error.message,
+      });
+      return;
+    }
+    if (data?.sent) toast.success(`${user.name || user.email} has been emailed`);
+  }
+
   async function approve(user: UserProfile, role: Role) {
     const updated = await updateUser(user.id, { role, status: "Active" });
-    if (updated) toast.success(`${user.name || user.email} approved as ${role}`);
+    if (!updated) return;
+    toast.success(`${user.name || user.email} approved as ${role}`);
+    await tellThem(updated);
   }
 
   async function reject(user: UserProfile) {
@@ -91,7 +115,11 @@ export function UserManagementPage() {
 
   async function reactivate(user: UserProfile) {
     const updated = await updateUser(user.id, { status: "Active" });
-    if (updated) toast.success(`${user.name || user.email} reactivated`);
+    if (!updated) return;
+    toast.success(`${user.name || user.email} reactivated`);
+    // Being let back in is the same news as being let in, and losing Active
+    // cleared the record of having said it, so this really does send again.
+    await tellThem(updated);
   }
 
   async function deactivate(user: UserProfile) {
