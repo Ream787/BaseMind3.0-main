@@ -206,18 +206,29 @@ Deno.serve(async (req: Request) => {
     });
 
     if (!send.ok) {
-      // Resend says useful things here — an unverified domain, a key that
-      // was revoked — and the admin who pressed the button is exactly who
-      // needs to read them.
+      // Resend says useful things here — an unverified sending domain, a key
+      // that was revoked — and the admin who pressed the button is exactly
+      // who needs to read them.
       const detail = await send.text();
       // Also to the log, because the person who reads the toast and the
       // person who goes looking in the dashboard afterwards are often not
       // the same person, and the toast is gone in ten seconds.
       console.error("Resend refused the approval email", send.status, detail);
-      return json(
-        { error: `Resend refused it (${send.status}): ${detail.slice(0, 300)}` },
-        502,
-      );
+
+      // Their body is JSON with a written-out reason in it. Passing the raw
+      // JSON through would put braces and quotes in front of somebody
+      // holding a phone, burying the one sentence that says what to do.
+      let reason = detail.slice(0, 300);
+      try {
+        const parsed = JSON.parse(detail) as { message?: unknown };
+        if (typeof parsed.message === "string" && parsed.message.trim()) {
+          reason = parsed.message.trim();
+        }
+      } catch {
+        // Not JSON. The raw text stands.
+      }
+
+      return json({ error: `Resend wouldn't send it: ${reason}` }, 502);
     }
 
     // Only after the send. Stamping first would mean a failed send is never
