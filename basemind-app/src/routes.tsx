@@ -7,6 +7,7 @@ import { RequireFeature } from "@/components/layout/RequireFeature";
 import { RouteError } from "@/components/layout/RouteError";
 import type { FeatureKey } from "@/types/database";
 import { TermsPage } from "@/components/legal/TermsPage";
+import { PrivacyPage } from "@/components/legal/PrivacyPage";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { RegisterPage } from "@/components/auth/RegisterPage";
 import { PendingApprovalPage } from "@/components/auth/PendingApprovalPage";
@@ -105,7 +106,13 @@ export const router = createBrowserRouter([
   // auth pages: it is the first thing a new member ever loads, and a
   // spinner while a chunk downloads reads as another broken link.
   { path: "/auth/callback", element: <AuthCallbackPage />, errorElement: <RouteError /> },
-  { path: "/terms", element: <TermsPage />, errorElement: <RouteError /> },
+  // Both are public and both are quoted to Google's OAuth consent screen,
+  // which checks that they load for somebody who is not signed in.
+  { path: "/termsofservice", element: <TermsPage />, errorElement: <RouteError /> },
+  { path: "/privacy", element: <PrivacyPage />, errorElement: <RouteError /> },
+  // The old path, kept working rather than left to 404: it has been linked
+  // from the login page since August and may be written down elsewhere.
+  { path: "/terms", element: <Navigate to="/termsofservice" replace /> },
   {
     path: "/",
     element: <AppLayout />,

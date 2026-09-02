@@ -25,6 +25,9 @@ export type UserProfile = {
    * again. Only the notify-approved function writes this.
    */
   approval_emailed_at: string | null;
+  /** When this account last accepted the terms, and which version. */
+  terms_accepted_at: string | null;
+  terms_version: string | null;
   created_at: string;
   updated_at: string;
 };

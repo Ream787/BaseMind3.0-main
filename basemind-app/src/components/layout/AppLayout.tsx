@@ -8,6 +8,7 @@ import {
   Package,
   ScrollText,
   Settings,
+  ShieldCheck,
   ShoppingBasket,
   Sparkles,
   Sun,
@@ -17,6 +18,7 @@ import {
 
 import { useAuth } from "@/context/AuthContext";
 import { readAuthRedirect } from "@/lib/authRedirect";
+import { TermsGate, hasAcceptedTerms } from "@/components/legal/TermsGate";
 import { useTheme } from "@/context/ThemeContext";
 import { useFeatures } from "@/context/FeaturesContext";
 import { Button } from "@/components/ui/button";
@@ -89,6 +91,11 @@ export function AppLayout() {
     );
   }
   if (!profile || profile.status !== "Active") return <Navigate to="/pending" replace />;
+
+  // After approval and before anything else. A Pending account never gets
+  // this far, which is right: there is nothing to agree to the use of until
+  // there is something to use.
+  if (!hasAcceptedTerms(profile)) return <TermsGate profile={profile} />;
 
   const isAdmin = profile.role === "Admin";
 
@@ -203,9 +210,15 @@ export function AppLayout() {
                 Report a bug
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <NavLink to="/terms" className="flex items-center gap-2">
+                <NavLink to="/termsofservice" className="flex items-center gap-2">
                   <ScrollText className="size-4" />
-                  Terms of use
+                  Terms of service
+                </NavLink>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <NavLink to="/privacy" className="flex items-center gap-2">
+                  <ShieldCheck className="size-4" />
+                  Privacy policy
                 </NavLink>
               </DropdownMenuItem>
               <DropdownMenuSeparator />

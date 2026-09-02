@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Mail } from "lucide-react";
 
 import { functionErrorMessage } from "@/lib/functionError";
 
@@ -117,6 +118,28 @@ export function UserManagementPage() {
     }
   }
 
+  /**
+   * Post somebody their copy of the terms.
+   *
+   * Useful for the leader who says they never saw them, and for anybody who
+   * accepted on a phone in a car park and would like it in writing.
+   */
+  async function sendTerms(user: UserProfile) {
+    setBusyId(user.id);
+    const { error } = await supabase.functions.invoke("send-terms", {
+      body: { userId: user.id },
+    });
+    setBusyId(null);
+    if (error) {
+      toast.error("Couldn't send the terms", {
+        description: await functionErrorMessage(error),
+        duration: 10000,
+      });
+      return;
+    }
+    toast.success(`Terms sent to ${user.name || user.email}`);
+  }
+
   async function approve(user: UserProfile, role: Role) {
     const updated = await updateUser(user.id, { role, status: "Active" });
     if (!updated) return;
@@ -207,6 +230,7 @@ export function UserManagementPage() {
                           busy={busy}
                           onChange={(role) => changeRole(user, role)}
                         />
+                        <TermsButton user={user} busy={busy} onSend={sendTerms} />
                         <Button
                           variant="outline"
                           size="sm"
@@ -288,9 +312,12 @@ export function UserManagementPage() {
                         ) : user.status === "Pending" ? (
                           <PendingActions user={user} busy={busy} onApprove={approve} onReject={reject} />
                         ) : user.status === "Active" ? (
-                          <Button variant="outline" size="sm" disabled={busy} onClick={() => deactivate(user)}>
-                            Deactivate
-                          </Button>
+                          <span className="inline-flex items-center gap-2">
+                            <TermsButton user={user} busy={busy} onSend={sendTerms} />
+                            <Button variant="outline" size="sm" disabled={busy} onClick={() => deactivate(user)}>
+                              Deactivate
+                            </Button>
+                          </span>
                         ) : (
                           <Button variant="outline" size="sm" disabled={busy} onClick={() => reactivate(user)}>
                             Reactivate
@@ -306,6 +333,33 @@ export function UserManagementPage() {
         </>
       )}
     </div>
+  );
+}
+
+/** Icon-only: the row is already crowded, and the label lives in the title. */
+function TermsButton({
+  user,
+  busy,
+  onSend,
+}: {
+  user: UserProfile;
+  busy: boolean;
+  onSend: (user: UserProfile) => void;
+}) {
+  const accepted = user.terms_accepted_at
+    ? `accepted ${new Date(user.terms_accepted_at).toLocaleDateString()}`
+    : "not accepted yet";
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      disabled={busy}
+      aria-label={`Email the terms to ${user.name || user.email}`}
+      title={`Email the terms — ${accepted}`}
+      onClick={() => onSend(user)}
+    >
+      <Mail className="size-4" />
+    </Button>
   );
 }
 
