@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { functionErrorMessage } from "@/lib/functionError";
+
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import type { Role, UserProfile, UserStatus } from "@/types/database";
@@ -92,13 +94,27 @@ export function UserManagementPage() {
     const { data, error } = await supabase.functions.invoke("notify-approved", {
       body: { userId: user.id },
     });
+    const who = user.name || user.email;
+
     if (error) {
-      toast.warning(`Approved, but couldn't email ${user.name || user.email}`, {
-        description: error.message,
+      // The function's own words, not "returned a non-2xx status code" —
+      // an unverified sending domain and a revoked key need different
+      // people to do different things.
+      toast.warning(`Approved, but couldn't email ${who}`, {
+        description: await functionErrorMessage(error),
+        duration: 10000,
       });
       return;
     }
-    if (data?.sent) toast.success(`${user.name || user.email} has been emailed`);
+
+    if (data?.sent) {
+      toast.success(`${who} has been emailed`);
+    } else {
+      // Never silent. "Nothing happened" is indistinguishable from a broken
+      // button, and this path is reached whenever somebody has already been
+      // told — which is a fact worth stating rather than hiding.
+      toast.info(`${who} was already told they're approved`);
+    }
   }
 
   async function approve(user: UserProfile, role: Role) {

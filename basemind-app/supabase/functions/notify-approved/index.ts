@@ -210,6 +210,10 @@ Deno.serve(async (req: Request) => {
       // was revoked — and the admin who pressed the button is exactly who
       // needs to read them.
       const detail = await send.text();
+      // Also to the log, because the person who reads the toast and the
+      // person who goes looking in the dashboard afterwards are often not
+      // the same person, and the toast is gone in ten seconds.
+      console.error("Resend refused the approval email", send.status, detail);
       return json(
         { error: `Resend refused it (${send.status}): ${detail.slice(0, 300)}` },
         502,
@@ -232,6 +236,7 @@ Deno.serve(async (req: Request) => {
 
     return json({ sent: true });
   } catch (err) {
+    console.error("Approval email failed", err);
     return json(
       { error: `Couldn't send the approval email: ${err instanceof Error ? err.message : err}` },
       500,
