@@ -1,10 +1,13 @@
 // Telling somebody their account has been approved.
 //
 // Supabase's own SMTP settings only serve its auth emails — there is no
-// "send this" API behind them — so this function holds the credentials again
-// and sends over plain SMTP. That keeps it working with whichever provider
-// the group ended up using, since all of them speak SMTP and no two of them
-// agree on an HTTP API.
+// "send this" API behind them, and nothing from that panel reaches a
+// function — so this sends the mail itself, through Resend's HTTP API.
+//
+// HTTP rather than SMTP on purpose: it needs one secret instead of four, and
+// it is a plain request rather than a TCP conversation with STARTTLS in the
+// middle of it, which is the part that tends to be flaky from an edge
+// runtime.
 //
 // Everything is re-checked here rather than trusted from the browser. The
 // caller's token is exchanged for a user id, that id is looked up with the
@@ -13,15 +16,16 @@
 // from the group's domain to any address you like.
 //
 // Deploy: Supabase dashboard -> Edge Functions -> new function
-// "notify-approved", paste this file. Then set the secrets it names below;
-// they are the same ones already in Authentication -> SMTP Settings.
+// "notify-approved", paste this file. Then set its secrets:
 //
-//   SMTP_HOST  SMTP_PORT  SMTP_USER  SMTP_PASS  SMTP_FROM  APP_URL
-//
-// SMTP_FROM is the address it sends as, APP_URL the address the link points
-// at — "https://www.basemind.co.za", scheme and all.
-
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+//   RESEND_API_KEY  the key from resend.com/api-keys, starting "re_"
+//   EMAIL_FROM      an address on a domain verified with Resend, e.g.
+//                   "noreply@basemind.co.za". A display name is added if
+//                   you don't write one.
+//   APP_URL         where the button points: "https://www.basemind.co.za",
+//                   scheme and all.
+//   EMAIL_REPLY_TO  optional. Worth setting to a mailbox somebody reads,
+//                   because replies to a noreply address go nowhere.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,6 +41,18 @@ type Row = {
   status: string;
   approval_emailed_at: string | null;
 };
+
+/**
+ * "noreply@basemind.co.za" becomes "BaseMind <noreply@basemind.co.za>".
+ *
+ * A bare address shows up in an inbox as "noreply", which looks like spam
+ * from a group nobody has heard of. An address that already carries a name
+ * is left exactly as written.
+ */
+function sender(from: string): string {
+  const trimmed = from.trim();
+  return trimmed.includes("<") ? trimmed : `BaseMind <${trimmed}>`;
+}
 
 /** The same look as the confirmation email: tables, inline styles, no fonts. */
 function body(name: string, role: string, appUrl: string): string {
@@ -106,11 +122,9 @@ Deno.serve(async (req: Request) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const host = Deno.env.get("SMTP_HOST");
-  const port = Number(Deno.env.get("SMTP_PORT") ?? "587");
-  const user = Deno.env.get("SMTP_USER");
-  const pass = Deno.env.get("SMTP_PASS");
-  const from = Deno.env.get("SMTP_FROM");
+  const resendKey = Deno.env.get("RESEND_API_KEY");
+  const from = Deno.env.get("EMAIL_FROM");
+  const replyTo = Deno.env.get("EMAIL_REPLY_TO");
   const appUrl = (Deno.env.get("APP_URL") ?? "").replace(/\/+$/, "");
 
   if (!supabaseUrl || !serviceKey) {
@@ -148,10 +162,8 @@ Deno.serve(async (req: Request) => {
     // internet which of the group's mail secrets are missing, and the anon
     // key that reaches this endpoint ships inside the app.
     const missing = [
-      !host && "SMTP_HOST",
-      !user && "SMTP_USER",
-      !pass && "SMTP_PASS",
-      !from && "SMTP_FROM",
+      !resendKey && "RESEND_API_KEY",
+      !from && "EMAIL_FROM",
       !appUrl && "APP_URL",
     ].filter(Boolean);
     if (missing.length > 0) {
@@ -178,24 +190,31 @@ Deno.serve(async (req: Request) => {
     // mistake, and the second one should quietly do nothing.
     if (target.approval_emailed_at) return json({ sent: false, reason: "already-sent" });
 
-    const client = new SMTPClient({
-      connection: {
-        hostname: host!,
-        port,
-        // 465 is TLS from the first byte; 587 opens in the clear and upgrades
-        // with STARTTLS, which denomailer does on its own.
-        tls: port === 465,
-        auth: { username: user!, password: pass! },
+    const send = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        from: sender(from!),
+        to: [target.email],
+        subject: "Your BaseMind account is approved",
+        html: body(target.name ?? "", target.role, appUrl),
+        ...(replyTo ? { reply_to: replyTo } : {}),
+      }),
     });
 
-    await client.send({
-      from: from!,
-      to: target.email,
-      subject: "Your BaseMind account is approved",
-      html: body(target.name ?? "", target.role, appUrl),
-    });
-    await client.close();
+    if (!send.ok) {
+      // Resend says useful things here — an unverified domain, a key that
+      // was revoked — and the admin who pressed the button is exactly who
+      // needs to read them.
+      const detail = await send.text();
+      return json(
+        { error: `Resend refused it (${send.status}): ${detail.slice(0, 300)}` },
+        502,
+      );
+    }
 
     // Only after the send. Stamping first would mean a failed send is never
     // retried, which is the wrong way round: a duplicate is an annoyance, and
