@@ -78,8 +78,9 @@ export function PutAwayDialog({
           <AlertDialogTitle>Put these away?</AlertDialogTitle>
           <AlertDialogDescription>
             Each of these is filed both loose in {room} and in something standing in it.
-            Moving the loose ones in clears the room list. Nothing is deleted — the counts
-            only change place.
+            Where the two are the same kit counted twice, the loose copy goes; where they
+            are different kit, it moves in. Either way the room list clears and the number
+            the group owns does not change.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -91,8 +92,11 @@ export function PutAwayDialog({
             >
               <span className="min-w-0 truncate font-medium">{stray.item.name}</span>
               <span className="shrink-0 text-xs text-muted-foreground">
-                {stray.loose} loose → {stray.place.name}
-                <span className="ml-1 opacity-70">(has {stray.inPlace})</span>
+                {stray.moving === 0
+                  ? `${stray.loose} already counted in ${stray.place.name}`
+                  : stray.duplicate === 0
+                    ? `${stray.loose} → ${stray.place.name} (has ${stray.inPlace})`
+                    : `${stray.duplicate} already counted, ${stray.moving} → ${stray.place.name}`}
               </span>
             </li>
           ))}

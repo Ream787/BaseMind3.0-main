@@ -207,6 +207,17 @@ export type StrayLoose = {
   /** The place in this room that already holds most of it. */
   place: StoragePlace;
   inPlace: number;
+  /**
+   * Of the loose units, how many the place is already counting.
+   *
+   * Placements adding up to more than the group owns are lying, and the
+   * surplus is the second record of kit already filed. Those units are
+   * dropped from the room rather than added to the place — adding them would
+   * count the same tent twice and claim eight of four.
+   */
+  duplicate: number;
+  /** The rest: genuinely on the floor, and genuinely moving into the place. */
+  moving: number;
 };
 
 export function strayLooseItems(
@@ -247,7 +258,18 @@ export function strayLooseItems(
     }
 
     if (best) {
-      rows.push({ item, loose: placement.quantity, place: best.place, inPlace: best.quantity });
+      const placed = placements
+        .filter((p) => p.equipment_id === item.id)
+        .reduce((sum, p) => sum + p.quantity, 0);
+      const duplicate = Math.min(placement.quantity, Math.max(0, placed - item.quantity));
+      rows.push({
+        item,
+        loose: placement.quantity,
+        place: best.place,
+        inPlace: best.quantity,
+        duplicate,
+        moving: placement.quantity - duplicate,
+      });
     }
   }
 
