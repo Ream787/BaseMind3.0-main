@@ -116,18 +116,6 @@ Deno.serve(async (req: Request) => {
   if (!supabaseUrl || !serviceKey) {
     return json({ error: "This function is not configured." }, 500);
   }
-  // Named individually: "not configured" on its own is the least useful thing
-  // an error can say to whoever has to go and fix it.
-  const missing = [
-    !host && "SMTP_HOST",
-    !user && "SMTP_USER",
-    !pass && "SMTP_PASS",
-    !from && "SMTP_FROM",
-    !appUrl && "APP_URL",
-  ].filter(Boolean);
-  if (missing.length > 0) {
-    return json({ error: `Approval emails need these secrets set: ${missing.join(", ")}` }, 500);
-  }
 
   const admin = (path: string) =>
     fetch(`${supabaseUrl}/rest/v1/${path}`, {
@@ -153,6 +141,21 @@ Deno.serve(async (req: Request) => {
     const caller = callerRows[0];
     if (caller?.role !== "Admin" || caller?.status !== "Active") {
       return json({ error: "Only an active Admin can send that." }, 403);
+    }
+
+    // Only now, with an Admin on the line, is it safe to describe how this
+    // function is configured. Answering that to anyone who asks tells the
+    // internet which of the group's mail secrets are missing, and the anon
+    // key that reaches this endpoint ships inside the app.
+    const missing = [
+      !host && "SMTP_HOST",
+      !user && "SMTP_USER",
+      !pass && "SMTP_PASS",
+      !from && "SMTP_FROM",
+      !appUrl && "APP_URL",
+    ].filter(Boolean);
+    if (missing.length > 0) {
+      return json({ error: `Approval emails need these secrets set: ${missing.join(", ")}` }, 500);
     }
 
     const { userId } = (await req.json()) as { userId?: string };
