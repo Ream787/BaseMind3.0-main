@@ -1,0 +1,92 @@
+<!--
+  The "Confirm signup" email.
+
+  Paste into Supabase → Authentication → Email Templates → Confirm signup.
+  It is kept here so it is version-controlled and can be pasted back after a
+  project is rebuilt, which is the sort of thing nobody remembers having
+  customised until it is gone.
+
+  Written the way email has to be written rather than the way the app is:
+  tables, inline styles, no external CSS and no web fonts. Outlook renders
+  through Word, Gmail strips most of a <style> block, and a layout that
+  depends on either arrives as a stack of unstyled text.
+
+  {{ .ConfirmationURL }} is Supabase's own variable. Where it lands is set in
+  Authentication → URL Configuration, NOT here: if the Site URL is still
+  http://localhost:3000 this email will be beautiful and still go nowhere.
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="background:#f4f2f7;margin:0;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+             style="max-width:480px;background:#ffffff;border-radius:12px;border:1px solid #e7e3ee;">
+
+        <tr>
+          <td style="padding:28px 28px 0;text-align:center;">
+            <div style="font-size:22px;font-weight:700;color:#7c3aed;letter-spacing:-0.4px;">
+              BaseMind
+            </div>
+            <div style="font-size:13px;color:#6b7280;padding-top:2px;">
+              Scout equipment, camps and food
+            </div>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:24px 28px 0;">
+            <h1 style="margin:0 0 8px;font-size:19px;line-height:1.35;color:#111827;font-weight:600;">
+              Confirm your email address
+            </h1>
+            <p style="margin:0;font-size:15px;line-height:1.55;color:#374151;">
+              Someone created a BaseMind account with this address. Tap the button to confirm
+              it — then an admin approves the account before there is anything to see.
+            </p>
+          </td>
+        </tr>
+
+        <!-- The button. A table rather than a styled <a>: Outlook ignores
+             padding on inline elements and the tap target collapses to the
+             height of the text. -->
+        <tr>
+          <td style="padding:24px 28px 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+              <tr>
+                <td align="center" bgcolor="#7c3aed" style="border-radius:8px;">
+                  <a href="{{ .ConfirmationURL }}"
+                     style="display:block;padding:14px 20px;font-size:16px;font-weight:600;
+                            color:#ffffff;text-decoration:none;border-radius:8px;">
+                    Confirm my email
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:20px 28px 0;">
+            <p style="margin:0;font-size:13px;line-height:1.5;color:#6b7280;">
+              The button not working? Copy this into your browser:
+            </p>
+            <p style="margin:6px 0 0;font-size:12px;line-height:1.5;word-break:break-all;">
+              <a href="{{ .ConfirmationURL }}" style="color:#7c3aed;">{{ .ConfirmationURL }}</a>
+            </p>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:20px 28px 28px;">
+            <div style="border-top:1px solid #e7e3ee;padding-top:16px;">
+              <p style="margin:0;font-size:12px;line-height:1.5;color:#9ca3af;">
+                The link works once and expires in 24 hours. If you didn't sign up, ignore
+                this — no account is created until the address is confirmed.
+              </p>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>

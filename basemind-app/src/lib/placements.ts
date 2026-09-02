@@ -190,6 +190,70 @@ export function looseInRoom(
     .sort((a, b) => a.item.name.localeCompare(b.item.name));
 }
 
+/**
+ * Kit filed in two places at once: loose in a room, and in something
+ * standing in that same room.
+ *
+ * Not a data error the database could refuse — six of a thing really can be
+ * in a box while two sit on the floor — but it is almost never what somebody
+ * meant. Putting kit in a box used to leave the room's pile untouched, so
+ * a store full of packed boxes went on listing everything as loose as well.
+ * Finding these is what lets the app offer to put them away.
+ */
+export type StrayLoose = {
+  item: Equipment;
+  /** Units lying loose in the room. */
+  loose: number;
+  /** The place in this room that already holds most of it. */
+  place: StoragePlace;
+  inPlace: number;
+};
+
+export function strayLooseItems(
+  room: string,
+  placements: EquipmentPlacement[],
+  places: StoragePlace[],
+  equipmentById: Map<string, Equipment>,
+): StrayLoose[] {
+  const wanted = roomKey(room);
+  const here = new Map(
+    places.filter((p) => roomKey(p.location) === wanted).map((p) => [p.id, p]),
+  );
+
+  const rows: StrayLoose[] = [];
+
+  for (const placement of placements) {
+    if (placement.location === null) continue;
+    if (roomKey(placement.location) !== wanted) continue;
+
+    const item = equipmentById.get(placement.equipment_id);
+    if (!item) continue;
+
+    // Where else in this room the same item is filed. The biggest pile wins,
+    // by name when they tie, so the suggestion is the same every time it is
+    // asked rather than shuffling between two identical boxes.
+    let best: { place: StoragePlace; quantity: number } | null = null;
+    for (const other of placements) {
+      if (other.equipment_id !== item.id || other.storage_id === null) continue;
+      const place = here.get(other.storage_id);
+      if (!place) continue;
+      if (
+        !best ||
+        other.quantity > best.quantity ||
+        (other.quantity === best.quantity && place.name.localeCompare(best.place.name) < 0)
+      ) {
+        best = { place, quantity: other.quantity };
+      }
+    }
+
+    if (best) {
+      rows.push({ item, loose: placement.quantity, place: best.place, inPlace: best.quantity });
+    }
+  }
+
+  return rows.sort((a, b) => a.item.name.localeCompare(b.item.name));
+}
+
 /** Every room that holds something, loose or stored. */
 export function roomsInUse(
   placements: EquipmentPlacement[],

@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Box, ChevronRight, Palette, Plus, QrCode, Search, Sparkles } from "lucide-react";
+import {
+  ArrowLeft,
+  Box,
+  ChevronRight,
+  PackageCheck,
+  Palette,
+  Plus,
+  QrCode,
+  Search,
+  Sparkles,
+} from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 
@@ -35,6 +45,7 @@ import { EquipmentCleanupDialog } from "@/components/equipment/EquipmentCleanupD
 import { CheckDialog } from "@/components/equipment/CheckDialog";
 import { ColourIndexDialog } from "@/components/equipment/ColourIndexDialog";
 import { QrScannerDialog } from "@/components/storage/QrScannerDialog";
+import { PutAwayDialog } from "@/components/equipment/PutAwayDialog";
 import { generateBoxCode } from "@/lib/boxes";
 import {
   byEquipment,
@@ -44,6 +55,7 @@ import {
   placementParts,
   looseInRoom,
   roomKey,
+  strayLooseItems,
   roomOf,
   roomsInUse,
 } from "@/lib/placements";
@@ -82,6 +94,7 @@ export function EquipmentPage() {
   const [viewing, setViewing] = useState<Equipment | null>(null);
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [puttingAway, setPuttingAway] = useState(false);
   const [coloursOpen, setColoursOpen] = useState(false);
 
   const [users, setUsers] = useState<UserOption[]>([]);
@@ -280,6 +293,21 @@ export function EquipmentPage() {
       .map(({ item }) => item)
       .filter((item) => visible.has(item.id));
   }, [view, openGroup, placements, equipmentById, visibleItems, filtered]);
+
+  /**
+   * Kit this room lists as loose while it also sits in a box in this room.
+   *
+   * Stowing used to add without taking, so a store packed before that was
+   * fixed still reads as though nothing was ever put away. Rather than
+   * guessing on the user's behalf, the room says so and offers to move them.
+   */
+  const strays = useMemo(
+    () =>
+      view === "location" && openGroup
+        ? strayLooseItems(openGroup.name, placements, boxes, equipmentById)
+        : [],
+    [view, openGroup, placements, boxes, equipmentById],
+  );
 
   /** One line per item saying where its units actually are. */
   const placementSummary = useMemo(() => {
@@ -595,9 +623,23 @@ export function EquipmentPage() {
           )}
 
           {view === "location" && openGroup && looseItems.length > 0 && (
-            <h2 className="text-sm font-medium text-muted-foreground">
-              Loose in this room
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-medium text-muted-foreground">
+                Loose in this room
+              </h2>
+              {canEdit && strays.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={blocked !== null}
+                  title={blocked ?? "Move them into the places they are already in"}
+                  onClick={() => setPuttingAway(true)}
+                >
+                  <PackageCheck className="size-4" />
+                  {strays.length} also in a box here
+                </Button>
+              )}
+            </div>
           )}
 
           <EquipmentTable
@@ -646,6 +688,15 @@ export function EquipmentPage() {
       <CheckDialog item={checking} onOpenChange={(open) => !open && setChecking(null)} />
 
       <QrScannerDialog open={scanning} onOpenChange={setScanning} onFound={openScanned} />
+
+      {openGroup && (
+        <PutAwayDialog
+          open={puttingAway}
+          onOpenChange={setPuttingAway}
+          room={openGroup.name}
+          strays={strays}
+        />
+      )}
 
       <EquipmentCleanupDialog
         open={cleanupOpen}

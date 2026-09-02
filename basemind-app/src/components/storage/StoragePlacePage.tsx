@@ -306,19 +306,18 @@ export function StoragePlacePage() {
     if (!box) return;
     setAdding(true);
     try {
-      // p_add: putting three in a box that holds two means five, not three.
-      // Setting it outright is what the number beside a row does.
-      const { error } = await supabase.rpc("place_equipment", {
+      // Stowing is a move, not an addition: the units come off whatever is
+      // lying loose in this room before they are counted in here. Adding
+      // without taking left the room listing kit that was standing in a box.
+      const { error } = await supabase.rpc("stow_equipment", {
         p_equipment_id: item.id,
         p_storage_id: box.id,
-        p_location: null,
         p_quantity: quantity,
-        p_add: true,
       });
       if (error) throw new Error(error.message);
       setNewItem("");
       setNewQuantity("1");
-      toast.success(`${quantity} × ${item.name} added to ${box.name}`);
+      toast.success(`${quantity} × ${item.name} put in ${box.name}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't add that.");
     } finally {

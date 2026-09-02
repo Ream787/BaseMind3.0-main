@@ -508,6 +508,11 @@ export type Database = {
         };
         Returns: void;
       };
+      /** Move units off a room's loose pile and into a place standing in it. */
+      stow_equipment: {
+        Args: { p_equipment_id: string; p_storage_id: string; p_quantity: number };
+        Returns: void;
+      };
       delete_storage_place: {
         Args: { p_storage_id: string; p_keep_contents?: boolean };
         Returns: void;
