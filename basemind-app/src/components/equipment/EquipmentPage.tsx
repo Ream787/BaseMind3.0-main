@@ -176,23 +176,50 @@ export function EquipmentPage() {
     () => Array.from(new Set(equipment.map((e) => e.category).filter((c): c is string => !!c))).sort(),
     [equipment],
   );
-  const locations = useMemo(
-    () => Array.from(new Set(equipment.map((e) => e.location).filter(Boolean))).sort(),
-    [equipment],
-  );
+  const boxesById = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
+  const placementsByItem = useMemo(() => byEquipment(placements), [placements]);
+
+  /**
+   * Every room a person could file something in.
+   *
+   * Built from where things actually are — placements and the rooms the
+   * storage places stand in — plus the older `location` column, which is
+   * still what an item carries until it is placed. Reading only that column
+   * left rooms that exist out of the list: Room 2 held two tents by
+   * placement, so it appeared on the inventory but could not be chosen when
+   * adding the next thing to it.
+   */
+  const locations = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const { key, name } of roomsInUse(placements, boxes)) names.set(key, name);
+    for (const item of equipment) {
+      const name = item.location?.trim();
+      if (name) names.set(name.toLowerCase(), name);
+    }
+    return [...names.values()].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" }),
+    );
+  }, [equipment, placements, boxes]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return equipment.filter((item) => {
+      // Searching includes where the thing is now — the room it is placed in
+      // and the box it is in — not just the room column. "Impalas" used to
+      // miss a tent standing in Impalas, and a box name could not be
+      // searched at all although the list prints it in the Where column.
       const matchesSearch =
         !term ||
         item.name.toLowerCase().includes(term) ||
         item.location.toLowerCase().includes(term) ||
-        (item.category ?? "").toLowerCase().includes(term);
+        (item.category ?? "").toLowerCase().includes(term) ||
+        describePlacements(item, placementsByItem.get(item.id) ?? [], boxesById)
+          .toLowerCase()
+          .includes(term);
       const matchesCondition = conditionFilter === "All" || item.condition === conditionFilter;
       return matchesSearch && matchesCondition;
     });
-  }, [equipment, search, conditionFilter]);
+  }, [equipment, search, conditionFilter, placementsByItem, boxesById]);
 
   // Inside an open room/category, narrow further to just that group's items.
   const visibleItems = useMemo(() => {
@@ -200,12 +227,10 @@ export function EquipmentPage() {
     return filtered.filter((item) => groupKeyFor(item, view) === openGroup.key);
   }, [filtered, view, openGroup]);
 
-  const boxesById = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
   const equipmentById = useMemo(
     () => new Map(equipment.map((e) => [e.id, e])),
     [equipment],
   );
-  const placementsByItem = useMemo(() => byEquipment(placements), [placements]);
 
   /**
    * The storage places standing directly in each room.
@@ -244,6 +269,12 @@ export function EquipmentPage() {
     const visible = new Set(filtered.map((item) => item.id));
     const rooms = roomsInUse(placements, boxes);
 
+    // While a search or a condition filter is on, a room with nothing in it
+    // is not an answer. The list used to show every room reading "0 items ·
+    // 0 total", so a search that found nothing looked the same as one that
+    // found something in a room further down.
+    const filtering = search.trim() !== "" || conditionFilter !== "All";
+
     return rooms.map(({ key, name }) => {
       const inRoom = placements.filter((p) => {
         const room = roomOf(p, boxesById);
@@ -259,8 +290,8 @@ export function EquipmentPage() {
         totalQuantity: inRoom.reduce((sum, p) => sum + p.quantity, 0),
         needsAttention: items.filter((item) => item.condition !== "Good").length,
       };
-    });
-  }, [view, filtered, placements, boxes, boxesById, equipmentById]);
+    }).filter((group) => !filtering || group.items.length > 0);
+  }, [view, filtered, placements, boxes, boxesById, equipmentById, search, conditionFilter]);
 
   const openRoomBoxes = useMemo(
     () => (view === "location" && openGroup ? (boxesByRoom.get(openGroup.key) ?? []) : []),

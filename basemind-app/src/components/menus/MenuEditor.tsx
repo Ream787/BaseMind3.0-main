@@ -39,14 +39,27 @@ export function MenuEditor({ menu, meals, items, food, canEdit, scaleNote }: Men
 
   async function addMeal() {
     if (!newMealName.trim()) return;
+    const day = Math.max(1, Number(newMealDay) || 1);
     setAddingMeal(true);
     const { error } = await supabase.from("menu_meals").insert({
       menu_id: menu.id,
-      day_number: Math.max(1, Number(newMealDay) || 1),
+      day_number: day,
       meal_slot: newMealSlot,
       name: newMealName.trim(),
       notes: null,
     });
+
+    // A meal on day 3 makes it a three-day menu. The length was left at
+    // whatever it was written as, so a menu could read "2 days" above a day
+    // 3 meal, and the length filter in the library filed it under the wrong
+    // number.
+    if (!error && day > menu.day_count) {
+      const { error: lengthError } = await supabase
+        .from("menus")
+        .update({ day_count: day })
+        .eq("id", menu.id);
+      if (lengthError) toast.error(lengthError.message);
+    }
     setAddingMeal(false);
     if (error) toast.error(error.message);
     else setNewMealName("");

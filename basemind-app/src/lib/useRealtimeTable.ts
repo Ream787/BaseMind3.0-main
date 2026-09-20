@@ -62,6 +62,20 @@ export function useRealtimeTable<T extends TableName>(
         setLoading(false);
       }
 
+      // Every table is behind row-level security, so asking before there is a
+      // session doesn't fail — it returns nothing, which is worse. That empty
+      // answer was then cached and kept: the feature switches load with the
+      // app, which mounts on the login page, so after signing in every switch
+      // read as on and the admin page said the migration hadn't been run.
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!active) return;
+      if (!session) {
+        setLoading(false);
+        return;
+      }
+
       const { data, error: fetchError } = await supabase.from(table).select("*");
       if (!active) return;
 
@@ -80,6 +94,14 @@ export function useRealtimeTable<T extends TableName>(
       setLoading(false);
     }
     load();
+
+    // And load again when somebody signs in, because the first attempt was
+    // made by a visitor with no session. INITIAL_SESSION fires on subscribe
+    // and is what load() has just handled, so only the real transitions
+    // count.
+    const { data: authSub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN" || event === "SIGNED_OUT") void load();
+    });
 
     // The channel name has to be unique per hook instance, not per table.
     // Supabase throws "cannot add postgres_changes callbacks after
@@ -104,6 +126,7 @@ export function useRealtimeTable<T extends TableName>(
 
     return () => {
       active = false;
+      authSub.subscription.unsubscribe();
       supabase.removeChannel(channel);
     };
   }, [table, sortRows, primaryKey]);

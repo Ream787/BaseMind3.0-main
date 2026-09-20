@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import {
   collectFacts,
+  outOfDateFacts,
   renderSafetyPlanText,
   validateNoInvention,
   type SafetyPlanInput,
@@ -62,6 +63,10 @@ export function SafetyPlanSection({
 
   const facts = useMemo(() => (input ? collectFacts(input) : []), [input]);
   const templateText = useMemo(() => (input ? renderSafetyPlanText(input) : ""), [input]);
+  const stale = useMemo(
+    () => outOfDateFacts(facts, plan?.generated_text ?? null),
+    [facts, plan?.generated_text],
+  );
 
   async function createPlan() {
     setCreating(true);
@@ -375,6 +380,20 @@ export function SafetyPlanSection({
           </p>
         )}
 
+        {/* A saved plan is a snapshot, and nothing said so. Change the
+            leader's number after writing one and the printout — and any
+            official form filled from it — kept the old number. */}
+        {stale.length > 0 && (
+          <p className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <span>
+              This was written before {listNames(stale.map((fact) => fact.label.toLowerCase()))}{" "}
+              changed, so it doesn&apos;t match the details above. Write it again before you print
+              it.
+            </span>
+          </p>
+        )}
+
         <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border bg-card p-4 text-sm">
           {plan.generated_text || templateText}
         </pre>
@@ -388,6 +407,14 @@ export function SafetyPlanSection({
       </div>
     </section>
   );
+}
+
+/** "the leader phone" · "the leader phone and the first aider". */
+function listNames(names: string[]): string {
+  const unique = [...new Set(names)];
+  if (unique.length === 1) return `the ${unique[0]}`;
+  const last = unique[unique.length - 1];
+  return `the ${unique.slice(0, -1).join(", the ")} and the ${last}`;
 }
 
 /** Text field that saves on blur, so edits aren't lost by navigating away. */

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate, Outlet, NavLink, useLocation } from "react-router";
+import { Navigate, Outlet, NavLink, ScrollRestoration, useLocation } from "react-router";
 import {
   Bug,
   CalendarDays,
@@ -117,6 +117,11 @@ export function AppLayout() {
 
   return (
     <div className="flex min-h-screen flex-col">
+      {/* Every page opened where the last one was scrolled to: following a
+          link from the bottom of the equipment list landed you halfway down
+          the next page. This scrolls to the top on a new page and puts you
+          back where you were when you go Back. */}
+      <ScrollRestoration />
       {/* py-1.5 on phones rather than py-3: the row is already as tall as its
           32px controls, and the extra padding only pushed the page down. */}
       <header className="flex items-center justify-between gap-2 border-b px-4 py-1.5 sm:py-3">
@@ -169,7 +174,10 @@ export function AppLayout() {
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 rounded-md p-1 hover:bg-accent">
+              <button
+                className="flex items-center gap-2 rounded-md p-1 hover:bg-accent"
+                aria-label="Your account"
+              >
                 <UserAvatar user={profile} size="sm" />
               </button>
             </DropdownMenuTrigger>
@@ -232,11 +240,18 @@ export function AppLayout() {
       </header>
       <OfflineBanner />
 
-      {/* pb-20 on mobile keeps content clear of the fixed bottom bar.
+      {/* pb-20 keeps content clear of the fixed bottom bar, and only md:
+          — where the bar is gone — may take it away. The padding used to be
+          written `p-4 pb-20 sm:p-6`, and `sm:p-6` quietly reset the bottom to
+          24px from 640px up while the bar was still there to 767px: the last
+          control on every page sat under it, and tapping Next in the camp
+          wizard hit the Assistant tab instead.
           A flex column so a page can fill the height rather than the window
           scrolling — the assistant needs its question box pinned to the
-          bottom, which it can't be if the page is as tall as the transcript. */}
-      <main className="flex flex-1 flex-col p-4 pb-20 sm:p-6 md:pb-6">
+          bottom, which it can't be if the page is as tall as the transcript.
+          The max width stops tables and text boxes stretching the full width
+          of a desktop monitor. */}
+      <main className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col px-4 pt-4 pb-20 sm:px-6 sm:pt-6 md:pb-6">
         <Outlet />
       </main>
 

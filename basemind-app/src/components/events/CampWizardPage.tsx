@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -26,6 +26,37 @@ const NONE = "__none";
 const STEPS = ["Camp", "Site", "Menu", "Equipment", "Review"] as const;
 type Step = (typeof STEPS)[number];
 
+/**
+ * Five steps of typing lived in component state, so anything that left the
+ * page threw it away — including a mistap on the bottom bar, which used to
+ * sit on top of the Next button. The draft is kept per tab: it is one camp
+ * being planned right now, not something to find again next week.
+ */
+const DRAFT_KEY = "basemind-camp-draft";
+
+type Draft = {
+  step: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  notes: string;
+  headcount: string;
+  siteId: string;
+  menuId: string;
+  picked: Record<string, number>;
+};
+
+function readDraft(): Partial<Draft> {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    return raw ? (JSON.parse(raw) as Partial<Draft>) : {};
+  } catch {
+    // A private window, or somebody's storage is full. Starting blank is a
+    // worse day than losing a draft, so never let this throw.
+    return {};
+  }
+}
+
 export function CampWizardPage() {
   const navigate = useNavigate();
   const { hasRole } = useAuth();
@@ -35,17 +66,31 @@ export function CampWizardPage() {
   const { rows: equipment } = useRealtimeTable("equipment", { orderBy: "name" });
   const { rows: loans } = useRealtimeTable("equipment_loans");
 
-  const [step, setStep] = useState(0);
+  const [draft] = useState(readDraft);
+  const [step, setStep] = useState(draft.step ?? 0);
   const [saving, setSaving] = useState(false);
 
-  const [name, setName] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [notes, setNotes] = useState("");
-  const [headcount, setHeadcount] = useState("");
-  const [siteId, setSiteId] = useState(NONE);
-  const [menuId, setMenuId] = useState(NONE);
-  const [picked, setPicked] = useState<Record<string, number>>({});
+  const [name, setName] = useState(draft.name ?? "");
+  const [startDate, setStartDate] = useState(draft.startDate ?? "");
+  const [endDate, setEndDate] = useState(draft.endDate ?? "");
+  const [notes, setNotes] = useState(draft.notes ?? "");
+  const [headcount, setHeadcount] = useState(draft.headcount ?? "");
+  const [siteId, setSiteId] = useState(draft.siteId ?? NONE);
+  const [menuId, setMenuId] = useState(draft.menuId ?? NONE);
+  const [picked, setPicked] = useState<Record<string, number>>(draft.picked ?? {});
+
+  // Saved on every change rather than on leaving: the page can be closed by
+  // the phone rather than by the person.
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({ step, name, startDate, endDate, notes, headcount, siteId, menuId, picked }),
+      );
+    } catch {
+      // Nothing to do about it, and nothing worth interrupting anybody for.
+    }
+  }, [step, name, startDate, endDate, notes, headcount, siteId, menuId, picked]);
 
   const canEdit = hasRole(["Admin", "Manager", "Member"]);
   if (!canEdit) return <Navigate to="/events" replace />;
@@ -324,7 +369,8 @@ export function CampWizardPage() {
         {current === "Equipment" && (
           <div className="flex flex-col gap-3">
             <p className="text-sm text-muted-foreground">
-              Tick what you&apos;re taking. Anything fully out on loan is greyed out.
+              Tick what you&apos;re taking. Anything out on loan, broken or missing is greyed
+              out.
             </p>
             {/* 384px is right on a phone but wastes a tablet, where it left a
                 short box floating above 400px of empty page. Capped against the
@@ -335,7 +381,11 @@ export function CampWizardPage() {
                 <p className="p-4 text-sm text-muted-foreground">No equipment in the inventory.</p>
               ) : (
                 equipment.map((item) => {
-                  const free = availableQuantity(item, loans);
+                  // Broken and missing kit was offered as free to pack: the
+                  // wizard only looked at loans, so the gazebo somebody had
+                  // written off went on the list as two of two available.
+                  const serviceable = item.condition === "Good" || item.condition === "Needs Repair";
+                  const free = serviceable ? availableQuantity(item, loans) : 0;
                   const checked = item.id in picked;
                   return (
                     <label
@@ -345,13 +395,16 @@ export function CampWizardPage() {
                       <Checkbox
                         checked={checked}
                         disabled={free === 0}
+                        aria-label={item.name}
                         onCheckedChange={(v) => toggleItem(item.id, v === true)}
                       />
                       <span className={`flex-1 text-sm ${free === 0 ? "text-muted-foreground" : ""}`}>
                         {item.name}
                         <span className="text-muted-foreground"> · {item.location}</span>
                       </span>
-                      <span className="text-xs text-muted-foreground">{free} free</span>
+                      <span className="text-xs text-muted-foreground">
+                        {serviceable ? `${free} free` : item.condition.toLowerCase()}
+                      </span>
                       {checked && (
                         <Input
                           type="number"

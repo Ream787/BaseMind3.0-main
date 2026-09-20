@@ -187,7 +187,10 @@ export function EventMenuSection({
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  setPresetName(menu.name);
+                  // Named after the camp, not after the preset this menu
+                  // came from: offering the old name meant pressing Save
+                  // added a second "Lightweight Hike" to the library.
+                  setPresetName(event.name);
                   setPresetCategory(menu.category ?? "");
                   setSaveOpen(true);
                 }}
@@ -313,6 +316,13 @@ export function EventMenuSection({
                 onChange={(e) => setPresetCategory(e.target.value)}
               />
             </div>
+            {presets.some(
+              (p) => p.name.trim().toLowerCase() === presetName.trim().toLowerCase(),
+            ) && (
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                There is already a menu called that. Saving adds a second one with the same name.
+              </p>
+            )}
             {menu && event.headcount && menu.serves !== event.headcount && (
               <p className="text-sm text-muted-foreground">
                 It will be saved as feeding {menu.serves}, matching this camp&apos;s quantities.

@@ -2,7 +2,7 @@ import type { jsPDF } from "jspdf";
 
 import type { FoodItem, Menu, MenuMeal, MenuMealItem } from "@/types/database";
 import { aggregateMenuRequirements, mealsByDay } from "@/lib/menus";
-import { roundQuantity } from "@/lib/shoppingList";
+import { formatQuantity } from "@/lib/shoppingList";
 import { drawFooterLogo } from "@/lib/pdfLogo";
 
 type PdfDoc = jsPDF & { lastAutoTable?: { finalY: number } };
@@ -103,7 +103,7 @@ export async function downloadMenuPdf(data: MenuPdfData): Promise<void> {
           .filter((item) => item.meal_id === meal.id)
           .map((item) => {
             const f = foodById.get(item.food_item_id);
-            return f ? `${f.name} — ${roundQuantity(item.quantity)} ${f.unit}` : null;
+            return f ? `${f.name} — ${formatQuantity(item.quantity, f.unit)}` : null;
           })
           .filter(Boolean)
           .join("\n");
@@ -114,7 +114,7 @@ export async function downloadMenuPdf(data: MenuPdfData): Promise<void> {
         ];
       }),
       theme: "striped",
-      headStyles: { fillColor: [124, 58, 237], textColor: 255, fontSize: 10 },
+      headStyles: { fillColor: [109, 74, 255], textColor: 255, fontSize: 10 },
       styles: { fontSize: 10, cellPadding: 2, valign: "top" },
       columnStyles: { 0: { cellWidth: 32 }, 1: { cellWidth: 58 } },
       margin: { left: MARGIN, right: MARGIN },
@@ -143,12 +143,12 @@ export async function downloadMenuPdf(data: MenuPdfData): Promise<void> {
       body: totals
         .map((line) => {
           const f = foodById.get(line.food_item_id);
-          return f ? [f.name, `${roundQuantity(line.quantity)} ${f.unit}`, ""] : null;
+          return f ? [f.name, formatQuantity(line.quantity, f.unit), ""] : null;
         })
         .filter((row): row is string[] => row !== null)
         .sort((a, b) => a[0].localeCompare(b[0])),
       theme: "striped",
-      headStyles: { fillColor: [124, 58, 237], textColor: 255, fontSize: 10 },
+      headStyles: { fillColor: [109, 74, 255], textColor: 255, fontSize: 10 },
       styles: { fontSize: 10, cellPadding: 2 },
       columnStyles: { 1: { cellWidth: 30 }, 2: { cellWidth: 20 } },
       margin: { left: MARGIN, right: MARGIN },

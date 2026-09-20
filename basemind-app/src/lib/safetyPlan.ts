@@ -213,6 +213,53 @@ export function validateNoInvention(facts: Fact[], generated: string): Validatio
   };
 }
 
+/**
+ * The facts a saved plan has to still contain to be worth printing.
+ *
+ * Names and numbers only. Prose is left out on purpose: the whole point of
+ * "rewrite more readably" is that the wording changes, so checking a note
+ * word for word would report every rewritten plan as out of date. Dates and
+ * headcounts are left out for the same reason — a model may write "6
+ * December 2026" for 2026-12-06, and nobody rings a date.
+ */
+const CHECKED_LABELS = new Set([
+  "Site",
+  "Site phone",
+  "Nearest hospital",
+  "Hospital phone",
+  "Hospital address",
+  "Distance to hospital",
+  "Leader in charge",
+  "Leader phone",
+  "On standby",
+  "Standby phone",
+  "First aider",
+  "First aider phone",
+  "Emergency number",
+  "Ambulance number",
+]);
+
+/** Whitespace and case don't count; digits and letters do. */
+function loosely(text: string): string {
+  return text.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/**
+ * Which of today's facts the saved text no longer mentions.
+ *
+ * A written plan is a snapshot. Change the leader's phone number after
+ * writing one and the plan keeps the old number, with nothing on screen to
+ * say so — and that saved text is what goes onto the printout and into
+ * filled-in forms. Empty means the plan still matches.
+ */
+export function outOfDateFacts(facts: Fact[], saved: string | null): Fact[] {
+  if (!saved?.trim()) return [];
+  const hay = loosely(saved);
+  return facts.filter(
+    (fact) => CHECKED_LABELS.has(fact.label) && !hay.includes(loosely(fact.value)),
+  );
+}
+
 /** The instruction sent to the model. Deliberately narrow. */
 export function buildPrompt(facts: Fact[]): string {
   const factLines = facts.map((f) => `- ${f.label}: ${f.value}`).join("\n");

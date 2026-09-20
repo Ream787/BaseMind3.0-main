@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router";
 import {
   ArrowLeft,
@@ -14,14 +14,22 @@ import {
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
+import type { CampEvent } from "@/types/database";
 import { useOffline } from "@/context/OfflineContext";
 import { useFeatures } from "@/context/FeaturesContext";
 import { useWritePermissions } from "@/lib/useWritePermissions";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
-import { buildClaims, buildFoodPlan, roundQuantity, toShoppingList } from "@/lib/shoppingList";
+import {
+  buildClaims,
+  buildFoodPlan,
+  formatQuantity,
+  roundQuantity,
+  toShoppingList,
+} from "@/lib/shoppingList";
 import { todayISO } from "@/lib/loans";
 import { aggregateMenuRequirements, mealsByDay, mergeRequirements } from "@/lib/menus";
 import { downloadCampPlanPdf, formatDateRange } from "@/lib/campPlanPdf";
+import { renderSafetyPlanText } from "@/lib/safetyPlan";
 import { EventMenuSection } from "@/components/menus/EventMenuSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,7 +91,41 @@ export function EventDetailPage() {
 
   const { canAdd, canEdit, canDelete, blockedByOffline } = useWritePermissions();
 
-  const event = events.find((e) => e.id === eventId) ?? null;
+  /**
+   * A camp that isn't in the list yet is fetched rather than given up on.
+   *
+   * The list is loaded once and kept in step by realtime, so a camp created a
+   * second ago — by the wizard, which sends you straight here — isn't in it.
+   * This page used to bounce back to the calendar, where the new camp then
+   * appeared several seconds later as if the wizard had gone the wrong way.
+   */
+  const [fetchedEvent, setFetchedEvent] = useState<CampEvent | null>(null);
+  const [lookedUp, setLookedUp] = useState(false);
+  const knownEvent = events.find((e) => e.id === eventId) ?? null;
+
+  useEffect(() => {
+    if (!eventId || knownEvent) {
+      setLookedUp(true);
+      return;
+    }
+    if (eventsLoading) return;
+    let active = true;
+    void supabase
+      .from("events")
+      .select("*")
+      .eq("id", eventId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!active) return;
+        setFetchedEvent((data as CampEvent | null) ?? null);
+        setLookedUp(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [eventId, knownEvent, eventsLoading]);
+
+  const event = knownEvent ?? fetchedEvent;
   const site = event?.site_id ? (sites.find((s) => s.id === event.site_id) ?? null) : null;
 
   const equipmentById = useMemo(() => new Map(equipment.map((e) => [e.id, e])), [equipment]);
@@ -114,6 +156,40 @@ export function EventDetailPage() {
     () => (safetyPlan ? safetyScenarios.filter((s) => s.safety_plan_id === safetyPlan.id) : []),
     [safetyScenarios, safetyPlan],
   );
+  /**
+   * The safety plan as the printout wants it: the numbers somebody rings
+   * first, then the written plan itself.
+   *
+   * Built here rather than in the PDF so the page and the paper say the same
+   * thing — including the site's hospital, which the printout used to leave
+   * out entirely.
+   */
+  const safetyBlock = useMemo(() => {
+    if (!event || !safetyPlan) return null;
+    const input = { event, site, plan: safetyPlan, scenarios: planScenarios };
+    const contacts: [string, string][] = [];
+    const add = (label: string, value: string | null | undefined) => {
+      if (value?.trim()) contacts.push([label, value.trim()]);
+    };
+    add("Leader in charge", safetyPlan.leader_in_charge);
+    add("Leader phone", safetyPlan.leader_phone);
+    add("First aider", safetyPlan.first_aider_name);
+    add("First aider phone", safetyPlan.first_aider_phone);
+    add("On standby", safetyPlan.standby_name);
+    add("Standby phone", safetyPlan.standby_phone);
+    add("Emergency number", safetyPlan.emergency_number);
+    add("Ambulance", safetyPlan.ambulance_number);
+    add("Nearest hospital", site?.hospital_name);
+    add("Hospital phone", site?.hospital_phone);
+    add("Hospital address", site?.hospital_address);
+    add("How far", site?.hospital_distance);
+    add("Site phone", site?.phone);
+
+    const text = safetyPlan.generated_text?.trim() || renderSafetyPlanText(input);
+    if (contacts.length === 0 && !text.trim()) return null;
+    return { contacts, text };
+  }, [event, site, safetyPlan, planScenarios]);
+
   const menuMeals = useMemo(
     () => (menu ? allMeals.filter((m) => m.menu_id === menu.id) : []),
     [allMeals, menu],
@@ -177,7 +253,7 @@ export function EventDetailPage() {
     [foodStock, foodPlan],
   );
 
-  if (eventsLoading) {
+  if (eventsLoading || (!event && !lookedUp)) {
     return (
       <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
         Loading event…
@@ -186,12 +262,29 @@ export function EventDetailPage() {
   }
   if (!event) return <Navigate to="/events" replace />;
 
+  /**
+   * You cannot pack more than the group owns.
+   *
+   * The wizard has always capped this; the camp page did not, so a packing
+   * list could ask for seven tents out of five and nobody found out until
+   * they were loading the trailer.
+   */
+  function ownedCount(equipmentId: string): number {
+    return equipment.find((e) => e.id === equipmentId)?.quantity ?? 0;
+  }
+
   async function addEquipment() {
     if (!addEquipmentId) return;
+    const owned = ownedCount(addEquipmentId);
+    const wanted = Math.max(1, Number(addEquipmentQty) || 1);
+    if (owned > 0 && wanted > owned) {
+      toast.error(`The group owns ${owned} of those.`);
+      return;
+    }
     const { error } = await addRow("event_equipment", {
       event_id: event!.id,
       equipment_id: addEquipmentId,
-      quantity: Math.max(1, Number(addEquipmentQty) || 1),
+      quantity: wanted,
     });
     if (error) toast.error(error);
     else {
@@ -200,8 +293,13 @@ export function EventDetailPage() {
     }
   }
 
-  async function updateEquipmentQty(rowId: string, quantity: number) {
+  async function updateEquipmentQty(rowId: string, quantity: number, equipmentId: string) {
     if (quantity < 1) return;
+    const owned = ownedCount(equipmentId);
+    if (owned > 0 && quantity > owned) {
+      toast.error(`The group owns ${owned} of those.`);
+      return;
+    }
     const { error } = await supabase
       .from("event_equipment")
       .update({ quantity })
@@ -267,6 +365,7 @@ export function EventDetailPage() {
         packing: packing.map(({ equipment: item, quantity }) => ({ equipment: item, quantity })),
         foodPlan,
         shopping,
+        safety: safetyBlock,
       });
       toast.success("Camp plan downloaded");
     } catch (err) {
@@ -378,6 +477,7 @@ export function EventDetailPage() {
             <Input
               type="number"
               min={1}
+              max={addEquipmentId ? ownedCount(addEquipmentId) : undefined}
               className="w-24"
               aria-label="Quantity"
               value={addEquipmentQty}
@@ -415,10 +515,15 @@ export function EventDetailPage() {
                           type="number"
                           min={1}
                           className="h-8 w-20"
+                          max={line.equipment.quantity}
                           aria-label={`Quantity of ${line.equipment.name}`}
                           value={line.quantity}
                           onChange={(e) =>
-                            updateEquipmentQty(line.rowId, Number(e.target.value) || 1)
+                            updateEquipmentQty(
+                              line.rowId,
+                              Number(e.target.value) || 1,
+                              line.equipment.id,
+                            )
                           }
                         />
                       ) : (
@@ -564,11 +669,11 @@ export function EventDetailPage() {
                           <span className="text-sm text-muted-foreground">{line.unit}</span>
                         </div>
                       ) : (
-                        `${roundQuantity(line.needed)} ${line.unit}`
+                        formatQuantity(line.needed, line.unit)
                       )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {roundQuantity(line.availableToUs)} {line.unit}
+                      {formatQuantity(line.availableToUs, line.unit)}
                       {line.claimedElsewhere > 0 && (
                         <span
                           className="block text-xs"
@@ -582,7 +687,7 @@ export function EventDetailPage() {
                     <TableCell>
                       {line.toBuy > 0 ? (
                         <span className="font-medium text-primary">
-                          {roundQuantity(line.toBuy)} {line.unit}
+                          {formatQuantity(line.toBuy, line.unit)}
                         </span>
                       ) : (
                         <span className="text-muted-foreground">Covered</span>
@@ -628,7 +733,7 @@ export function EventDetailPage() {
               <li key={line.eventFoodId} className="flex items-center justify-between gap-3 p-3">
                 <span className="font-medium">{line.name}</span>
                 <span className="text-sm">
-                  {roundQuantity(line.toBuy)} {line.unit}
+                  {formatQuantity(line.toBuy, line.unit)}
                 </span>
               </li>
             ))}

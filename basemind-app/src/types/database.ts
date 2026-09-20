@@ -517,10 +517,16 @@ export type Database = {
         };
         Returns: void;
       };
-      /** Move units off a room's loose pile and into a place standing in it. */
+      /**
+       * Move units off a room's loose pile and into a place standing in it.
+       *
+       * Reports what it did: how many came off the loose pile, how many were
+       * filed, and how many phantom units elsewhere had to be trimmed to
+       * keep the total honest.
+       */
       stow_equipment: {
         Args: { p_equipment_id: string; p_storage_id: string; p_quantity: number };
-        Returns: void;
+        Returns: { moved: number; added: number; trimmed: number };
       };
       delete_storage_place: {
         Args: { p_storage_id: string; p_keep_contents?: boolean };

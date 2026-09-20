@@ -91,8 +91,11 @@ export function buildFoodPlan(
         claimedElsewhere,
         claimedBy: claim?.byEvent ?? [],
         availableToUs,
-        // Rounded to shake off float noise like 0.30000000000000004
-        toBuy: Math.max(0, roundQuantity(req.quantity - availableToUs)),
+        // Rounded to shake off float noise like 0.30000000000000004, and up
+        // to the next whole one for things sold as things: a shop has no way
+        // to sell 0.75 of a tin, and a list that asks for it makes the person
+        // holding it do the arithmetic in the aisle.
+        toBuy: buyQuantity(req.quantity - availableToUs, item.unit),
       };
     })
     .filter((line): line is FoodPlanLine => line !== null)
@@ -109,7 +112,73 @@ export function roundQuantity(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
-/** Formats a quantity for display, dropping a redundant trailing ".0". */
+/**
+ * Units that come in whole ones. Everything else — kg, g, litres, ml — is
+ * weighed or poured, and 0.4 kg of cheese is a perfectly good thing to buy.
+ *
+ * Matching is loose on purpose: a food store filled in by hand has "tin",
+ * "tins", "Tins" and "TIN" in it.
+ */
+const COUNTABLE = new Set([
+  "unit", "units", "tin", "tins", "can", "cans", "packet", "packets", "pack", "packs",
+  "jar", "jars", "bottle", "bottles", "loaf", "loaves", "box", "boxes", "bag", "bags",
+  "head", "heads", "punnet", "punnets", "roll", "rolls", "tub", "tubs", "block", "blocks",
+  "slab", "slabs", "bunch", "bunches", "dozen", "each", "piece", "pieces", "sachet", "sachets",
+]);
+
+export function isCountableUnit(unit: string): boolean {
+  return COUNTABLE.has(unit.trim().toLowerCase());
+}
+
+/**
+ * How much to put on the shopping list.
+ *
+ * Countable things round up — needing 3.75 tins means buying 4 — and anything
+ * weighed keeps its decimal. Under a thousandth is treated as covered, so
+ * float noise doesn't send somebody to the shop for one tin of nothing.
+ */
+export function buyQuantity(shortfall: number, unit: string): number {
+  const trimmed = roundQuantity(shortfall);
+  if (trimmed <= 0) return 0;
+  return isCountableUnit(unit) ? Math.ceil(trimmed) : trimmed;
+}
+
+/**
+ * Units written in the plural in the food store, and how they read for one.
+ *
+ * Only the countable ones: "1 kg" and "1 litres" are not the same mistake.
+ */
+const SINGULAR: Record<string, string> = {
+  units: "unit",
+  tins: "tin",
+  cans: "can",
+  packets: "packet",
+  packs: "pack",
+  jars: "jar",
+  bottles: "bottle",
+  loaves: "loaf",
+  boxes: "box",
+  bags: "bag",
+  heads: "head",
+  punnets: "punnet",
+  rolls: "roll",
+  tubs: "tub",
+  blocks: "block",
+  slabs: "slab",
+  bunches: "bunch",
+  pieces: "piece",
+  sachets: "sachet",
+  litres: "litre",
+  liters: "liter",
+};
+
+/**
+ * Formats a quantity for display, dropping a redundant trailing ".0" and
+ * saying "1 packet" rather than "1 packets".
+ */
 export function formatQuantity(value: number, unit: string): string {
-  return `${roundQuantity(value)} ${unit}`;
+  const rounded = roundQuantity(value);
+  const trimmed = unit.trim();
+  if (rounded !== 1) return `${rounded} ${trimmed}`;
+  return `${rounded} ${SINGULAR[trimmed.toLowerCase()] ?? trimmed}`;
 }

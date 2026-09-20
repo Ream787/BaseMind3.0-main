@@ -95,7 +95,11 @@ export function RepairsPage() {
   const unrecorded = useMemo(() => {
     const hasOpenFault = new Set(open.map((f) => f.equipment_id));
     return equipment.filter(
-      (item) => item.condition !== "Good" && !hasOpenFault.has(item.id),
+      // Nothing left of it is nothing to repair. A written-off item keeps its
+      // row at zero for the history, and listing that as kit needing a fault
+      // written down is how "Written off" used to send you straight back to
+      // where you started.
+      (item) => item.condition !== "Good" && item.quantity > 0 && !hasOpenFault.has(item.id),
     );
   }, [equipment, open]);
   const resolved = useMemo(() => faults.filter((f) => f.resolved_on), [faults]);
@@ -139,6 +143,7 @@ export function RepairsPage() {
   }
 
   async function resolve(fault: EquipmentFault) {
+    const item = equipment.find((e) => e.id === fault.equipment_id);
     const { error } = await supabase
       .from("equipment_faults")
       .update({
@@ -146,8 +151,38 @@ export function RepairsPage() {
         resolution: fault.plan === "Retire" ? "Retired" : "Fixed",
       })
       .eq("id", fault.id);
-    if (error) toast.error(error.message);
-    else toast.success(fault.plan === "Retire" ? "Written off" : "Marked fixed");
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    if (fault.plan !== "Retire") {
+      toast.success("Marked fixed");
+      return;
+    }
+
+    // Writing off takes the units out of the inventory. Say so — and when
+    // that was the last of them, offer to remove the row rather than doing
+    // it: the fault history goes with it.
+    const left = Math.max((item?.quantity ?? 0) - fault.quantity, 0);
+    toast.success(
+      `Written off — ${fault.quantity} × ${item?.name ?? "it"} removed from the inventory`,
+      left === 0 && item
+        ? {
+            description: "That was the last one. Its row stays at zero unless you delete it.",
+            action: {
+              label: "Delete it",
+              onClick: async () => {
+                const { error: deleteError } = await supabase
+                  .from("equipment")
+                  .delete()
+                  .eq("id", item.id);
+                if (deleteError) toast.error(deleteError.message);
+                else toast.success(`${item.name} deleted`);
+              },
+            },
+          }
+        : { description: `${left} left in the inventory.` },
+    );
   }
 
   function row(fault: EquipmentFault, done: boolean) {
@@ -242,7 +277,10 @@ export function RepairsPage() {
           <Button
             onClick={() => setReporting(true)}
             disabled={blocked !== null}
-            title={blocked ?? "Record something broken"}
+            // Only a reason it can't be pressed. A tooltip that renames the
+            // button — "Record something broken" over "Report a fault" — is
+            // what a screen reader then announces instead of the label.
+            title={blocked ?? undefined}
           >
             <Plus className="size-4" />
             Report a fault

@@ -77,6 +77,40 @@ function buildPrompt(docs: Doc[], inUse: string[]): string {
   ].join("\n");
 }
 
+/**
+ * Is this a real, approved member — not just anybody holding the app's
+ * public key?
+ *
+ * The check used to be that the request carried a Bearer token of any kind.
+ * The anon key is a Bearer token, and it ships inside the website, so the
+ * group's Gemini quota was available to anyone who opened the page source.
+ * Asking Supabase who the token belongs to is the only way to tell the two
+ * apart, and the row is then read with that same token so row-level security
+ * decides what comes back.
+ */
+async function callerIsActiveMember(authHeader: string | null): Promise<boolean> {
+  if (!authHeader?.startsWith("Bearer ")) return false;
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!supabaseUrl || !anonKey) return false;
+
+  const who = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: { Authorization: authHeader, apikey: anonKey },
+  });
+  if (!who.ok) return false;
+  const id = ((await who.json()) as { id?: string })?.id;
+  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return false;
+
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/users?select=status&id=eq.${id}&limit=1`,
+    { headers: { Authorization: authHeader, apikey: anonKey } },
+  );
+  if (!res.ok) return false;
+  const [row] = (await res.json()) as { status?: string }[];
+  return row?.status === "Active";
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -90,8 +124,8 @@ Deno.serve(async (req: Request) => {
     const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) return json({ error: "GEMINI_API_KEY is not set on the function." }, 500);
 
-    if (!req.headers.get("Authorization")?.startsWith("Bearer ")) {
-      return json({ error: "Not signed in." }, 401);
+    if (!(await callerIsActiveMember(req.headers.get("Authorization")))) {
+      return json({ error: "Only signed-in members can sort the shelf." }, 401);
     }
 
     const { documents, inUse } = (await req.json()) as {

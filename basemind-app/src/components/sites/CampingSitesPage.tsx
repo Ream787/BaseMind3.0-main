@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Mail, MapPin, Phone, Plus, Search, Pencil, Trash2 } from "lucide-react";
+import { Hospital, Mail, MapPin, Phone, Plus, Search, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
@@ -237,6 +237,33 @@ export function CampingSitesPage() {
                   </span>
                 )}
               </div>
+
+              {/* The hospital was only visible by opening the edit form, so
+                  the one detail worth checking before a camp was the one you
+                  had to go looking for. */}
+              {site.hospital_name ? (
+                <p className="flex items-start gap-2 border-t pt-2 text-sm">
+                  <Hospital className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                  <span>
+                    {site.hospital_name}
+                    {site.hospital_distance && (
+                      <span className="text-muted-foreground"> · {site.hospital_distance}</span>
+                    )}
+                    {site.hospital_phone && (
+                      <a
+                        href={`tel:${site.hospital_phone}`}
+                        className="ml-2 text-primary hover:underline"
+                      >
+                        {site.hospital_phone}
+                      </a>
+                    )}
+                  </span>
+                </p>
+              ) : (
+                <p className="border-t pt-2 text-sm text-muted-foreground">
+                  No hospital recorded.
+                </p>
+              )}
 
               {site.notes && (
                 <p className="border-t pt-2 text-sm text-muted-foreground">{site.notes}</p>

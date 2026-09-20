@@ -187,7 +187,10 @@ export function ProfilePage() {
             size="sm"
             className="shrink-0"
             onClick={toggleTheme}
-            aria-pressed={theme === "dark"}
+            // The button says what pressing it does, so it is not a toggle
+            // that is on: "Light, pressed" is what aria-pressed made a
+            // screen reader announce while the app was in dark mode.
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           >
             {theme === "dark" ? (
               <>

@@ -309,7 +309,7 @@ export function StoragePlacePage() {
       // Stowing is a move, not an addition: the units come off whatever is
       // lying loose in this room before they are counted in here. Adding
       // without taking left the room listing kit that was standing in a box.
-      const { error } = await supabase.rpc("stow_equipment", {
+      const { data, error } = await supabase.rpc("stow_equipment", {
         p_equipment_id: item.id,
         p_storage_id: box.id,
         p_quantity: quantity,
@@ -317,7 +317,19 @@ export function StoragePlacePage() {
       if (error) throw new Error(error.message);
       setNewItem("");
       setNewQuantity("1");
-      toast.success(`${quantity} × ${item.name} put in ${box.name}`);
+      // Say when the records had to be straightened out to fit. Silently
+      // dropping the units was the old bug; silently trimming somebody
+      // else's pile instead would be the same mistake in the other
+      // direction.
+      const trimmed = data?.trimmed ?? 0;
+      toast.success(
+        `${quantity} × ${item.name} put in ${box.name}`,
+        trimmed > 0
+          ? {
+              description: `${trimmed} × ${item.name} had been filed in more places than the group owns, so that many were taken off the loose piles.`,
+            }
+          : undefined,
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't add that.");
     } finally {
@@ -464,6 +476,11 @@ export function StoragePlacePage() {
                   id="box-name"
                   value={draftName}
                   onChange={(e) => setDraftName(e.target.value)}
+                  // A new place is created called "New box", and that is a
+                  // value rather than a placeholder — so tapping the field
+                  // on a phone put the caret after it and the first thing
+                  // anybody typed became "New boxRope box".
+                  onFocus={(e) => e.target.select()}
                   onBlur={saveHeader}
                   disabled={blocked !== null}
                   placeholder="Cooking box 1"

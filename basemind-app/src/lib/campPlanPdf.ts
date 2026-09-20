@@ -3,7 +3,7 @@ import type { jsPDF } from "jspdf";
 
 import type { CampEvent, CampingSite, Equipment } from "@/types/database";
 import type { FoodPlanLine } from "@/lib/shoppingList";
-import { roundQuantity } from "@/lib/shoppingList";
+import { formatQuantity } from "@/lib/shoppingList";
 import { drawFooterLogo } from "@/lib/pdfLogo";
 
 /** jspdf-autotable records where the last table ended on the document. */
@@ -27,6 +27,21 @@ export type CampPlanData = {
   packing: PackingLine[];
   foodPlan: FoodPlanLine[];
   shopping: FoodPlanLine[];
+  /**
+   * The safety plan, on its own page.
+   *
+   * It was missing from this file entirely while the app promised it "here
+   * and on the printout" — the one page of a camp plan somebody might need
+   * in a hurry was the one page it didn't print.
+   */
+  safety: SafetyBlock | null;
+};
+
+export type SafetyBlock = {
+  /** Name and number pairs, printed big at the top of the page. */
+  contacts: [string, string][];
+  /** The written plan, exactly as it reads in the app. */
+  text: string;
 };
 
 const MARGIN = 14;
@@ -119,7 +134,7 @@ export async function downloadCampPlanPdf(data: CampPlanData): Promise<void> {
       head: [["", "Meal", "What's cooking"]],
       body: menuRows,
       theme: "striped",
-      headStyles: { fillColor: [124, 58, 237], textColor: 255, fontSize: 10 },
+      headStyles: { fillColor: [109, 74, 255], textColor: 255, fontSize: 10 },
       styles: { fontSize: 10, cellPadding: 2 },
       columnStyles: { 0: { cellWidth: 20, fontStyle: "bold" }, 1: { cellWidth: 34 } },
       margin: { left: MARGIN, right: MARGIN },
@@ -144,7 +159,7 @@ export async function downloadCampPlanPdf(data: CampPlanData): Promise<void> {
         "", // tick-box column for use on the day
       ]),
       theme: "striped",
-      headStyles: { fillColor: [124, 58, 237], textColor: 255, fontSize: 10 },
+      headStyles: { fillColor: [109, 74, 255], textColor: 255, fontSize: 10 },
       styles: { fontSize: 10, cellPadding: 2 },
       columnStyles: { 0: { cellWidth: 14 }, 5: { cellWidth: 18 } },
       margin: { left: MARGIN, right: MARGIN },
@@ -160,16 +175,66 @@ export async function downloadCampPlanPdf(data: CampPlanData): Promise<void> {
       head: [["Item", "Needed", "In store", "To buy"]],
       body: data.foodPlan.map((line) => [
         line.name,
-        `${roundQuantity(line.needed)} ${line.unit}`,
-        `${roundQuantity(line.inStock)} ${line.unit}`,
-        line.toBuy > 0 ? `${roundQuantity(line.toBuy)} ${line.unit}` : "—",
+        formatQuantity(line.needed, line.unit),
+        formatQuantity(line.inStock, line.unit),
+        line.toBuy > 0 ? formatQuantity(line.toBuy, line.unit) : "—",
       ]),
       theme: "striped",
-      headStyles: { fillColor: [124, 58, 237], textColor: 255, fontSize: 10 },
+      headStyles: { fillColor: [109, 74, 255], textColor: 255, fontSize: 10 },
       styles: { fontSize: 10, cellPadding: 2 },
       margin: { left: MARGIN, right: MARGIN },
     });
     y = afterTable(doc);
+  }
+
+  // ---- Safety plan (own page: it is the page you hand somebody) ----------
+  if (data.safety) {
+    doc.addPage();
+    y = MARGIN;
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("Safety plan", MARGIN, y);
+    y += 7;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(90);
+    doc.text(`${data.event.name} — ${formatDateRange(data.event)}`, MARGIN, y);
+    doc.setTextColor(0);
+    y += 6;
+
+    if (data.safety.contacts.length > 0) {
+      autoTable(doc, {
+        startY: y,
+        body: data.safety.contacts,
+        theme: "grid",
+        // Bigger than the rest of the document on purpose: this is read
+        // standing up, in the dark, by somebody who is not calm.
+        styles: { fontSize: 12, cellPadding: 2.5, valign: "middle" },
+        columnStyles: {
+          0: { fontStyle: "bold", cellWidth: 55 },
+          1: { cellWidth: pageWidth - MARGIN * 2 - 55 },
+        },
+        margin: { left: MARGIN, right: MARGIN },
+      });
+      y = afterTable(doc);
+    }
+
+    doc.setFontSize(10);
+    for (const paragraph of data.safety.text.split("\n")) {
+      const line = paragraph.trim();
+      if (!line) {
+        y += 2;
+        continue;
+      }
+      // The written plan uses capitalised headings on their own line.
+      const heading = line === line.toUpperCase() && /[A-Z]/.test(line);
+      const wrapped: string[] = doc.splitTextToSize(line, pageWidth - MARGIN * 2);
+      y = ensureSpace(doc, y, wrapped.length * 5 + 4);
+      doc.setFont("helvetica", heading ? "bold" : "normal");
+      doc.text(wrapped, MARGIN, y);
+      y += wrapped.length * 5 + (heading ? 1 : 2);
+    }
+    doc.setFont("helvetica", "normal");
   }
 
   // ---- Shopping list (own page: it gets taken to the shop) ---------------
@@ -191,13 +256,13 @@ export async function downloadCampPlanPdf(data: CampPlanData): Promise<void> {
       startY: y,
       head: [["Buy", "Item", "Category", "Got it"]],
       body: data.shopping.map((line) => [
-        `${roundQuantity(line.toBuy)} ${line.unit}`,
+        formatQuantity(line.toBuy, line.unit),
         line.name,
         line.category ?? "—",
         "",
       ]),
       theme: "striped",
-      headStyles: { fillColor: [124, 58, 237], textColor: 255, fontSize: 10 },
+      headStyles: { fillColor: [109, 74, 255], textColor: 255, fontSize: 10 },
       styles: { fontSize: 11, cellPadding: 2.5 },
       columnStyles: { 0: { cellWidth: 26 }, 3: { cellWidth: 20 } },
       margin: { left: MARGIN, right: MARGIN },

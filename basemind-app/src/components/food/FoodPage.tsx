@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
+import { formatQuantity } from "@/lib/shoppingList";
 import type { FoodItem } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -242,7 +243,7 @@ export function FoodPage() {
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell className="text-muted-foreground">{item.category || "—"}</TableCell>
                     <TableCell>
-                      {item.quantity} {item.unit}
+                      {formatQuantity(item.quantity, item.unit)}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{item.notes || "—"}</TableCell>
                     {(canEdit || canDelete) && (
@@ -370,7 +371,8 @@ export function FoodPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {deleteTarget?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              It will also be removed from any camp food plans. This can&apos;t be undone.
+              It will also be removed from any camp food plans and from every menu it appears
+              in, including saved ones. This can&apos;t be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
