@@ -12,7 +12,11 @@ const ThemeContext = createContext<ThemeContextType>({ theme: "light", toggleThe
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
     const saved = localStorage.getItem("basemind-theme");
-    return (saved as Theme) || "light";
+    if (saved === "light" || saved === "dark") return saved;
+    // Dark unless the phone says otherwise: the app is charcoal and lavender
+    // now, and that is the version it should open as. A saved choice always
+    // wins, on the device it was made on.
+    return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
   });
 
   useEffect(() => {

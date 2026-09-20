@@ -1,48 +1,54 @@
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Charcoal and lavender, taken from the app mark: a near-black tile, a white
+ * tent, one lavender bar. The old scheme tinted every grey violet, which made
+ * a page of cards look like a colour wash; the greys are neutral now and the
+ * lavender is the only colour with a job.
+ */
 :root {
   --font-size: 16px;
-  --background: #faf9fc;
-  --foreground: #1a1625;
+  --background: #fafafa;
+  --foreground: #18181b;
   --card: #ffffff;
-  --card-foreground: #1a1625;
+  --card-foreground: #18181b;
   --popover: #ffffff;
-  --popover-foreground: #1a1625;
-  --primary: #7c3aed;
+  --popover-foreground: #18181b;
+  --primary: #6d4aff;
   --primary-foreground: #ffffff;
-  --secondary: #f3f0ff;
-  --secondary-foreground: #5b21b6;
-  --muted: #f0edf5;
-  --muted-foreground: #6b7280;
-  --accent: #ede9fe;
-  --accent-foreground: #5b21b6;
+  --secondary: #f2effe;
+  --secondary-foreground: #4c2fd6;
+  --muted: #f4f4f5;
+  --muted-foreground: #52525b;
+  --accent: #eee9ff;
+  --accent-foreground: #4c2fd6;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
-  --border: #e5e1ee;
+  --border: #e4e4e7;
   --input: transparent;
-  --input-background: #f5f3f8;
-  --switch-background: #c4b5d4;
+  --input-background: #f4f4f5;
+  --switch-background: #c7c7cd;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #7c3aed;
-  --chart-1: #7c3aed;
-  --chart-2: #06b6d4;
-  --chart-3: #f59e0b;
-  --chart-4: #10b981;
-  --chart-5: #ef4444;
+  --ring: #6d4aff;
+  --chart-1: #6d4aff;
+  --chart-2: #0891b2;
+  --chart-3: #d97706;
+  --chart-4: #059669;
+  --chart-5: #dc2626;
   --radius: 0.625rem;
   --sidebar: #ffffff;
-  --sidebar-foreground: #1a1625;
-  --sidebar-primary: #7c3aed;
+  --sidebar-foreground: #18181b;
+  --sidebar-primary: #6d4aff;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f3f0ff;
-  --sidebar-accent-foreground: #5b21b6;
-  --sidebar-border: #e5e1ee;
-  --sidebar-ring: #7c3aed;
+  --sidebar-accent: #f2effe;
+  --sidebar-accent-foreground: #4c2fd6;
+  --sidebar-border: #e4e4e7;
+  --sidebar-ring: #6d4aff;
 
   /* Person icons. Eight hues that sit beside the violet without fighting it;
      each is used both as the emblem ink and, tinted, as the disc behind it. */
-  --avatar-1: #7c3aed;
+  --avatar-1: #6d4aff;
   --avatar-2: #0891b2;
   --avatar-3: #b45309;
   --avatar-4: #059669;
@@ -52,46 +58,48 @@
   --avatar-8: #a21caf;
 }
 
+/* The mark's own colours, one step darker than the tile so a card sitting on
+   the page has something to lift off. */
 .dark {
-  --background: #0f0b1a;
-  --foreground: #e8e0f0;
-  --card: #1a1428;
-  --card-foreground: #e8e0f0;
-  --popover: #1a1428;
-  --popover-foreground: #e8e0f0;
-  --primary: #a78bfa;
-  --primary-foreground: #0f0b1a;
-  --secondary: #2d2140;
-  --secondary-foreground: #c4b5fd;
-  --muted: #251d35;
-  --muted-foreground: #9ca3af;
-  --accent: #2d2140;
-  --accent-foreground: #c4b5fd;
+  --background: #131316;
+  --foreground: #f4f4f5;
+  --card: #1b1b1f;
+  --card-foreground: #f4f4f5;
+  --popover: #1b1b1f;
+  --popover-foreground: #f4f4f5;
+  --primary: #b8a1ff;
+  --primary-foreground: #17161c;
+  --secondary: #27272c;
+  --secondary-foreground: #d8caff;
+  --muted: #202024;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272c;
+  --accent-foreground: #d8caff;
   --destructive: #b91c1c;
   --destructive-foreground: #fecaca;
-  --border: #2d2140;
-  --input: #2d2140;
-  --input-background: #251d35;
-  --switch-background: #4c3d6b;
-  --ring: #a78bfa;
+  --border: #2a2a31;
+  --input: #2a2a31;
+  --input-background: #202024;
+  --switch-background: #3f3f47;
+  --ring: #b8a1ff;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --chart-1: #a78bfa;
+  --chart-1: #b8a1ff;
   --chart-2: #22d3ee;
   --chart-3: #fbbf24;
   --chart-4: #34d399;
   --chart-5: #f87171;
-  --sidebar: #1a1428;
-  --sidebar-foreground: #e8e0f0;
-  --sidebar-primary: #a78bfa;
-  --sidebar-primary-foreground: #0f0b1a;
-  --sidebar-accent: #2d2140;
-  --sidebar-accent-foreground: #c4b5fd;
-  --sidebar-border: #2d2140;
-  --sidebar-ring: #a78bfa;
+  --sidebar: #1b1b1f;
+  --sidebar-foreground: #f4f4f5;
+  --sidebar-primary: #b8a1ff;
+  --sidebar-primary-foreground: #17161c;
+  --sidebar-accent: #27272c;
+  --sidebar-accent-foreground: #d8caff;
+  --sidebar-border: #2a2a31;
+  --sidebar-ring: #b8a1ff;
 
   /* Lightened so the emblem still reads against a dark disc. */
-  --avatar-1: #a78bfa;
+  --avatar-1: #b8a1ff;
   --avatar-2: #22d3ee;
   --avatar-3: #fbbf24;
   --avatar-4: #34d399;

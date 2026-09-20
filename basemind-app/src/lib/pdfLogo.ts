@@ -18,29 +18,29 @@ export function drawLogo(doc: jsPDF, x: number, y: number, size: number): void {
   /** favicon viewBox units -> mm */
   const u = (n: number) => (n / 100) * size;
 
-  doc.setFillColor(124, 58, 237);
+  doc.setFillColor(24, 24, 27);
   doc.roundedRect(x, y, size, size, u(24), u(24), "F");
 
-  doc.setFillColor(255, 255, 255);
-  doc.triangle(
-    x + u(50), y + u(22),
-    x + u(82), y + u(70),
-    x + u(18), y + u(70),
-    "F",
+  // The tent is a stroked path in the SVG. jsPDF strokes in the same units,
+  // so it is drawn the same way rather than approximated with triangles —
+  // that way the two marks stay the same shape when one of them is redrawn.
+  doc.setDrawColor(255, 255, 255);
+  doc.setLineWidth(u(13));
+  doc.setLineJoin("round");
+  doc.setLineCap("butt");
+  doc.lines(
+    [
+      [u(28), u(-47)],
+      [u(28), u(47)],
+    ],
+    x + u(22),
+    y + u(73),
+    [1, 1],
+    "S",
   );
 
-  doc.setFillColor(124, 58, 237);
-  doc.triangle(
-    x + u(50), y + u(44),
-    x + u(64), y + u(70),
-    x + u(36), y + u(70),
-    "F",
-  );
-
-  // In the SVG this bar is white at 50% over the tile. PDF fills don't blend
-  // for free, so use the colour that combination already resolves to.
-  doc.setFillColor(190, 157, 246);
-  doc.roundedRect(x + u(14), y + u(76), u(72), u(8), u(4), u(4), "F");
+  doc.setFillColor(184, 161, 255);
+  doc.roundedRect(x + u(19), y + u(80), u(62), u(11), u(5.5), u(5.5), "F");
 }
 
 /**

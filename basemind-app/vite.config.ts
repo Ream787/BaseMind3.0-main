@@ -15,8 +15,8 @@ export default defineConfig({
         name: "BaseMind",
         short_name: "BaseMind",
         description: "Scout equipment, camps and food management",
-        theme_color: "#7c3aed",
-        background_color: "#faf9fc",
+        theme_color: "#18181b",
+        background_color: "#131316",
         display: "standalone",
         start_url: "/",
         icons: [
