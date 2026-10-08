@@ -155,7 +155,7 @@ Deno.serve(async (req: Request) => {
     const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) return json({ error: "GEMINI_API_KEY is not set on the function." }, 500);
 
-    // Only signed-in users may spend the quota.
+    // Only approved members may spend the quota.
     if (!(await callerIsActiveMember(req.headers.get("Authorization")))) {
       return json({ error: "Only signed-in members can ask the assistant." }, 401);
     }

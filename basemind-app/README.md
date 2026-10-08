@@ -305,6 +305,65 @@ rather than duplicating them, and
 [`supabase/seed/remove_dummy_data.sql`](./supabase/seed/remove_dummy_data.sql) removes all of it
 without touching anything you added yourself.
 
+## Running more than one group
+
+One deployment can serve several Scout groups, each with **its own Supabase
+project**. Nothing is shared: not a table, not a row, not an account. The
+address says which group you are in.
+
+```
+https://basemind.example/                    the group at the root
+https://basemind.example/g/2nd-pretoria/     another group, another database
+https://basemind.example/groups              the list, to switch between them
+```
+
+Separate projects rather than a `group_id` column on every table, because a
+column is one forgotten `where` clause away from showing one group another
+group's camps. Two projects cannot leak into each other by accident. The
+price is that each group is set up by hand.
+
+### Adding a group
+
+1. **New Supabase project.** Note its URL and anon key (Settings → API).
+2. **Run the schema**, exactly as in step 3 above: every file in
+   `supabase/migrations/` in order, in that project's SQL editor.
+3. **Deploy the edge functions** — all of `supabase/functions/` — into that
+   project, and set its secrets: `GEMINI_API_KEY`, and the mail ones
+   (`RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL`) if that group sends approval
+   emails. `APP_URL` must include the group's path, e.g.
+   `https://basemind.example/g/2nd-pretoria`.
+4. **Add the group to `VITE_ORGS`** in Vercel → Settings → Environment
+   Variables. It is a JSON array, one entry per group:
+
+   ```json
+   [
+     {"slug":"","name":"14th Delport","url":"https://aaa.supabase.co","anonKey":"ey..."},
+     {"slug":"2nd-pretoria","name":"2nd Pretoria","url":"https://bbb.supabase.co","anonKey":"ey..."}
+   ]
+   ```
+
+   A `slug` of `""` keeps that group at the root of the site, so existing
+   links and installed phone apps carry on working. Every other group lives
+   under `/g/<slug>/`. `VITE_ORGS` replaces `VITE_SUPABASE_URL` and
+   `VITE_SUPABASE_ANON_KEY` when it is set.
+5. **Redeploy**, then create that group's first Admin exactly as in step 7 —
+   in its own project.
+
+The anon keys sit in that variable in plain sight, which is fine: they are
+publishable keys, the same ones already shipped inside the bundle. They
+identify a project and grant nothing on their own — row-level security
+decides what any request may read.
+
+### What each group keeps to itself
+
+Its database, its accounts, its feature switches, its policy documents and
+its Gemini key. On a shared phone, the offline cache and the camp-planning
+draft are namespaced per group too, so one group's equipment can't be read
+back as another's.
+
+A person who belongs to two groups registers separately in each, and signs
+in to each; there is no shared login.
+
 ## Deploying (GitHub + Vercel)
 
 1. **Push to GitHub.** From `basemind-app/`:

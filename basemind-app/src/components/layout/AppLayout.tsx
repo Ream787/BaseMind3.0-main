@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Navigate, Outlet, NavLink, ScrollRestoration, useLocation } from "react-router";
 import {
+  ArrowLeftRight,
   Bug,
   CalendarDays,
   LogOut,
@@ -24,6 +25,7 @@ import { useFeatures } from "@/context/FeaturesContext";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/ui/logo";
 import { useSecretKnock } from "@/lib/secretKnock";
+import { PICKER_PATH, currentOrganisation, organisations } from "@/lib/orgs";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { OfflineBanner } from "@/components/layout/OfflineBanner";
 import { BugReportDialog } from "@/components/layout/BugReportDialog";
@@ -137,6 +139,14 @@ export function AppLayout() {
           >
             <Logo className="size-8" />
           </button>
+          {/* Which group's data is on screen. Only worth saying when the
+              site runs more than one — and then it is worth saying on every
+              page, because the two look identical otherwise. */}
+          {organisations.length > 1 && currentOrganisation && (
+            <span className="hidden truncate text-sm font-medium sm:inline">
+              {currentOrganisation.name}
+            </span>
+          )}
           {/* On phones this row is hidden and the bottom bar takes over —
               easier to reach one-handed. */}
           <nav className="hidden items-center gap-1 md:flex">
@@ -185,7 +195,12 @@ export function AppLayout() {
               <DropdownMenuLabel>
                 <div className="flex flex-col">
                   <span className="font-medium">{profile.name || profile.email}</span>
-                  <span className="text-xs font-normal text-muted-foreground">{profile.role}</span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {profile.role}
+                    {organisations.length > 1 && currentOrganisation
+                      ? ` · ${currentOrganisation.name}`
+                      : ""}
+                  </span>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
@@ -209,6 +224,20 @@ export function AppLayout() {
                       <Settings className="size-4" />
                       Admin settings
                     </NavLink>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              {/* A plain link, not a NavLink: another group is another
+                  database behind another address, and getting there is a
+                  fresh page load rather than a route change. */}
+              {organisations.length > 1 && (
+                <>
+                  <DropdownMenuItem asChild>
+                    <a href={PICKER_PATH} className="flex items-center gap-2">
+                      <ArrowLeftRight className="size-4" />
+                      Switch group
+                    </a>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                 </>

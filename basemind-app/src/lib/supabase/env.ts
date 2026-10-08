@@ -1,9 +1,19 @@
-const trimTrailingSlash = (url: string) => url.replace(/\/+$|\s+$/g, "");
+import { currentOrganisation, organisations } from "@/lib/orgs";
 
-export const supabaseUrl = trimTrailingSlash(import.meta.env.VITE_SUPABASE_URL || "");
-export const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+/**
+ * Which project this page load talks to.
+ *
+ * It used to come straight from VITE_SUPABASE_URL. It now comes from the
+ * group in the address bar, which for a single-group deployment is still
+ * exactly those two variables.
+ */
+export const supabaseUrl = currentOrganisation?.url ?? "";
+export const supabaseAnonKey = currentOrganisation?.anonKey ?? "";
 
-export const missingEnvVars = [
-  !supabaseUrl && "VITE_SUPABASE_URL",
-  !supabaseAnonKey && "VITE_SUPABASE_ANON_KEY",
-].filter((v): v is string => !!v);
+/**
+ * Nothing is configured at all — as opposed to "several groups are
+ * configured and this URL names none of them", which is the picker's job
+ * rather than an error.
+ */
+export const missingEnvVars =
+  organisations.length === 0 ? ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"] : [];

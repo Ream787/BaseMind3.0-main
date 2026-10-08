@@ -6,9 +6,20 @@
  * IndexedDB keeps the cache well clear of that.
  */
 
+import { storagePrefix } from "@/lib/orgs";
+
 const DB_NAME = "basemind-offline";
 const DB_VERSION = 1;
 const STORE = "kv";
+
+/**
+ * Keys are per group.
+ *
+ * Several Scout groups share one origin, so they share this database. Without
+ * the prefix, opening the 2nd's equipment would read the 14th's cached rows
+ * back off the device and show them as the 2nd's.
+ */
+const scoped = (key: string) => `${storagePrefix}${key}`;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -48,7 +59,7 @@ function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequ
 /** Storage is best-effort: a failure here must never break the app. */
 export async function idbGet<T>(key: string): Promise<T | undefined> {
   try {
-    return await tx<T>("readonly", (store) => store.get(key) as IDBRequest<T>);
+    return await tx<T>("readonly", (store) => store.get(scoped(key)) as IDBRequest<T>);
   } catch {
     return undefined;
   }
@@ -56,7 +67,7 @@ export async function idbGet<T>(key: string): Promise<T | undefined> {
 
 export async function idbSet(key: string, value: unknown): Promise<void> {
   try {
-    await tx("readwrite", (store) => store.put(value, key) as IDBRequest<IDBValidKey>);
+    await tx("readwrite", (store) => store.put(value, scoped(key)) as IDBRequest<IDBValidKey>);
   } catch {
     // Out of quota or blocked — carry on without a cache.
   }
@@ -64,7 +75,7 @@ export async function idbSet(key: string, value: unknown): Promise<void> {
 
 export async function idbDelete(key: string): Promise<void> {
   try {
-    await tx("readwrite", (store) => store.delete(key) as IDBRequest<undefined>);
+    await tx("readwrite", (store) => store.delete(scoped(key)) as IDBRequest<undefined>);
   } catch {
     /* ignore */
   }

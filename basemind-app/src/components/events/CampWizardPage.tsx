@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
 import { availableQuantity } from "@/lib/loans";
+import { storagePrefix } from "@/lib/orgs";
 import { menuScale } from "@/lib/menus";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +33,7 @@ type Step = (typeof STEPS)[number];
  * sit on top of the Next button. The draft is kept per tab: it is one camp
  * being planned right now, not something to find again next week.
  */
-const DRAFT_KEY = "basemind-camp-draft";
+const DRAFT_KEY = `${storagePrefix}basemind-camp-draft`;
 
 type Draft = {
   step: number;

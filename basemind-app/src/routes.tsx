@@ -6,6 +6,7 @@ import { RequireRole } from "@/components/layout/RequireRole";
 import { RequireFeature } from "@/components/layout/RequireFeature";
 import { RouteError } from "@/components/layout/RouteError";
 import type { FeatureKey } from "@/types/database";
+import { basename } from "@/lib/orgs";
 import { TermsPage } from "@/components/legal/TermsPage";
 import { PrivacyPage } from "@/components/legal/PrivacyPage";
 import { LoginPage } from "@/components/auth/LoginPage";
@@ -195,4 +196,10 @@ export const router = createBrowserRouter([
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },
-]);
+], {
+  // Every route hangs off the group in the address: "/g/14th-delport" for
+  // one group, "/" for a site that runs a single one. Pages, links and
+  // redirects below are written as if they were at the root and never have
+  // to know which group they are in.
+  basename,
+});

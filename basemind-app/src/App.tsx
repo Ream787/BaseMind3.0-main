@@ -6,6 +6,8 @@ import { FeaturesProvider } from "@/context/FeaturesContext";
 import { OfflineProvider } from "@/context/OfflineContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { missingEnvVars } from "@/lib/supabase/env";
+import { currentOrganisation } from "@/lib/orgs";
+import { GroupPicker } from "@/components/layout/GroupPicker";
 import { router } from "@/routes";
 
 function MissingConfig() {
@@ -37,6 +39,12 @@ export function App() {
     <ThemeProvider>
       {missingEnvVars.length > 0 ? (
         <MissingConfig />
+      ) : !currentOrganisation ? (
+        // Several groups are set up and the address names none of them, or
+        // names one that doesn't exist. Ask rather than guess: loading one
+        // group's data under another group's URL is the one thing this must
+        // never do.
+        <GroupPicker />
       ) : (
         <OfflineProvider>
           <AuthProvider>
