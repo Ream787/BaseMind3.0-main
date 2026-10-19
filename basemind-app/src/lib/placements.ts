@@ -12,23 +12,44 @@
  * insisted on the sums balancing would force people to lie to it. The
  * difference is surfaced instead, as something to go and find.
  */
-import type { Equipment, EquipmentPlacement, StoragePlace } from "@/types/database";
+import type { Equipment, EquipmentPlacement, Room, StoragePlace } from "@/types/database";
 
 export const UNPLACED_LABEL = "Not placed yet";
 
-/** Case-folded room key, matching how the equipment grid buckets rooms. */
+/**
+ * Case-folded room name, for matching a name somebody typed or a slug out
+ * of a URL against the room list.
+ *
+ * Rooms are identified by id now, so this is no longer how the app decides
+ * whether two placements are in the same place — the database settles that,
+ * with one row per room and a unique index that ignores case and spacing.
+ */
 export function roomKey(name: string): string {
   return name.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-/** The room a placement is in — its own, or the room of the place holding it. */
+/** The name of a room, or null if it is not in the list. */
+export function roomName(
+  roomId: string | null,
+  roomsById: Map<string, Room>,
+): string | null {
+  if (roomId === null) return null;
+  return roomsById.get(roomId)?.name ?? null;
+}
+
+/**
+ * The room a placement is in — its own, or the room of the place holding it.
+ *
+ * Returns the room's id. A stored placement carries no room of its own, so
+ * it is read off the place, which the database keeps in step with its parent.
+ */
 export function roomOf(
   placement: EquipmentPlacement,
   placesById: Map<string, StoragePlace>,
 ): string | null {
-  if (placement.location !== null) return placement.location;
+  if (placement.room_id !== null) return placement.room_id;
   if (placement.storage_id === null) return null;
-  return placesById.get(placement.storage_id)?.location ?? null;
+  return placesById.get(placement.storage_id)?.room_id ?? null;
 }
 
 /**
@@ -40,6 +61,7 @@ export function roomOf(
 export function pathOf(
   place: StoragePlace,
   placesById: Map<string, StoragePlace>,
+  roomsById: Map<string, Room>,
 ): string[] {
   const names: string[] = [];
   let current: StoragePlace | undefined = place;
@@ -49,7 +71,9 @@ export function pathOf(
     names.unshift(current.name);
     current = current.parent_id ? placesById.get(current.parent_id) : undefined;
   }
-  return [place.location, ...names];
+  // A room the list hasn't caught up with yet is better shown as an honest
+  // gap than as the word "undefined" in the middle of a trail.
+  return [roomName(place.room_id, roomsById) ?? "—", ...names];
 }
 
 /**
@@ -89,7 +113,13 @@ export function pathInsideRoom(
   place: StoragePlace,
   placesById: Map<string, StoragePlace>,
 ): string {
-  return pathOf(place, placesById).slice(1).join(" › ");
+  const names: string[] = [];
+  let current: StoragePlace | undefined = place;
+  for (let depth = 0; current && depth < 10; depth++) {
+    names.unshift(current.name);
+    current = current.parent_id ? placesById.get(current.parent_id) : undefined;
+  }
+  return names.join(" › ");
 }
 
 /** Index placements by the item they describe. */
@@ -175,13 +205,12 @@ export function countWithin(
  * standing in it.
  */
 export function looseInRoom(
-  room: string,
+  roomId: string,
   placements: EquipmentPlacement[],
   equipmentById: Map<string, Equipment>,
 ): { item: Equipment; placement: EquipmentPlacement }[] {
-  const wanted = roomKey(room);
   return placements
-    .filter((p) => p.location !== null && roomKey(p.location) === wanted)
+    .filter((p) => p.room_id === roomId)
     .map((placement) => {
       const item = equipmentById.get(placement.equipment_id);
       return item ? { item, placement } : null;
@@ -221,21 +250,19 @@ export type StrayLoose = {
 };
 
 export function strayLooseItems(
-  room: string,
+  roomId: string,
   placements: EquipmentPlacement[],
   places: StoragePlace[],
   equipmentById: Map<string, Equipment>,
 ): StrayLoose[] {
-  const wanted = roomKey(room);
   const here = new Map(
-    places.filter((p) => roomKey(p.location) === wanted).map((p) => [p.id, p]),
+    places.filter((p) => p.room_id === roomId).map((p) => [p.id, p]),
   );
 
   const rows: StrayLoose[] = [];
 
   for (const placement of placements) {
-    if (placement.location === null) continue;
-    if (roomKey(placement.location) !== wanted) continue;
+    if (placement.room_id !== roomId) continue;
 
     const item = equipmentById.get(placement.equipment_id);
     if (!item) continue;
@@ -276,25 +303,34 @@ export function strayLooseItems(
   return rows.sort((a, b) => a.item.name.localeCompare(b.item.name));
 }
 
-/** Every room that holds something, loose or stored. */
+/**
+ * Every room that holds something, loose or stored.
+ *
+ * Rooms with nothing in them are left out, which is what this has always
+ * done. The full list — including the empty ones — is the rooms table
+ * itself, so anything offering a room to put kit in should read that
+ * instead of this.
+ */
 export function roomsInUse(
   placements: EquipmentPlacement[],
   places: StoragePlace[],
-): { key: string; name: string }[] {
+  roomsById: Map<string, Room>,
+): { id: string; name: string }[] {
   const placesById = new Map(places.map((p) => [p.id, p]));
-  const rooms = new Map<string, string>();
+  const used = new Set<string>();
 
-  for (const place of places) {
-    const name = place.location.trim();
-    if (name) rooms.set(roomKey(name), name);
-  }
+  for (const place of places) used.add(place.room_id);
   for (const placement of placements) {
-    const name = roomOf(placement, placesById)?.trim();
-    if (name) rooms.set(roomKey(name), name);
+    const id = roomOf(placement, placesById);
+    if (id) used.add(id);
   }
 
-  return [...rooms.entries()]
-    .map(([key, name]) => ({ key, name }))
+  return [...used]
+    .map((id) => {
+      const name = roomsById.get(id)?.name;
+      return name ? { id, name } : null;
+    })
+    .filter((row): row is { id: string; name: string } => row !== null)
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 }
 
@@ -310,8 +346,9 @@ export function describePlacements(
   item: Equipment,
   placements: EquipmentPlacement[] = [],
   placesById: Map<string, StoragePlace>,
+  roomsById: Map<string, Room>,
 ): string {
-  const parts = placementParts(item, placements, placesById);
+  const parts = placementParts(item, placements, placesById, roomsById);
 
   // Nothing filed anywhere reads as a plain "Not placed yet". Appending the
   // count there produced "not placed yet 1", which states the obvious in the
@@ -344,6 +381,7 @@ export function placementParts(
   item: Equipment,
   placements: EquipmentPlacement[] = [],
   placesById: Map<string, StoragePlace>,
+  roomsById: Map<string, Room>,
 ): PlacementPart[] {
   const parts = placements
     .map((p) => {
@@ -351,13 +389,13 @@ export function placementParts(
         const place = placesById.get(p.storage_id);
         return place
           ? {
-              where: describePath(pathOf(place, placesById)),
+              where: describePath(pathOf(place, placesById, roomsById)),
               quantity: p.quantity,
               unplaced: false,
             }
           : null;
       }
-      const room = (p.location ?? "").trim();
+      const room = roomName(p.room_id, roomsById)?.trim();
       return room ? { where: room, quantity: p.quantity, unplaced: false } : null;
     })
     .filter((part): part is PlacementPart => part !== null)

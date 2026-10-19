@@ -1,7 +1,7 @@
 import { Box, ChevronRight, DoorOpen, Tags } from "lucide-react";
 
 import type { Equipment } from "@/types/database";
-import { groupEquipment, type EquipmentGroup, type GroupBy } from "@/lib/groupEquipment";
+import { groupByCategory, type EquipmentGroup, type GroupBy } from "@/lib/groupEquipment";
 
 interface EquipmentGroupGridProps {
   items: Equipment[];
@@ -32,8 +32,8 @@ export function EquipmentGroupGrid({
   alwaysShow,
   groups: providedGroups,
 }: EquipmentGroupGridProps) {
-  const groups = providedGroups ?? groupEquipment(items, groupBy, alwaysShow);
-  const Icon = groupBy === "location" ? DoorOpen : Tags;
+  const groups = providedGroups ?? groupByCategory(items, alwaysShow);
+  const Icon = groupBy === "room" ? DoorOpen : Tags;
 
   if (groups.length === 0) {
     return (

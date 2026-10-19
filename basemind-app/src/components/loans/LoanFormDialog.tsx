@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
+import { useRoomLabels } from "@/lib/useRoomLabels";
 import { availableQuantity, todayISO } from "@/lib/loans";
 import type { Equipment, EquipmentLoan } from "@/types/database";
 import { Button } from "@/components/ui/button";
@@ -84,6 +85,7 @@ export function LoanFormDialog({
   presetEquipmentId,
   editing = null,
 }: LoanFormDialogProps) {
+  const { roomLabel } = useRoomLabels();
   const [form, setForm] = useState<FormState>(() => emptyForm());
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -329,7 +331,7 @@ export function LoanFormDialog({
                   </div>
                   {item && (
                     <p className="text-xs text-muted-foreground">
-                      {free} of {item.quantity} available · kept in {item.location}
+                      {free} of {item.quantity} available · kept in {roomLabel(item.id)}
                     </p>
                   )}
                 </div>

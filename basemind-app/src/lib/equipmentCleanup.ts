@@ -25,12 +25,12 @@ export type DuplicateFinding = {
   /** Rows sharing a name: almost certainly one thing entered more than once. */
   itemIds: string[];
   name: string;
-  /** Where those rows currently say they are, for the description. */
-  locations: string[];
+  /** Which rooms those rows are in, for the description. */
+  rooms: string[];
 };
 
 export type VariantFinding = {
-  kind: "location-variants" | "category-variants";
+  kind: "category-variants";
   /** The spelling to keep, always one that already exists in the data. */
   canonical: string;
   /** The other spellings of it, also all real values. */
@@ -73,7 +73,7 @@ export type ItemVariantFinding = {
  * That is why they get a lighter confirmation than merging two rows.
  */
 export type RenameFinding = {
-  kind: "item-rename" | "location-rename" | "category-rename";
+  kind: "item-rename" | "category-rename";
   from: string;
   to: string;
   /** How many rows would be touched. */
@@ -96,11 +96,7 @@ export type Finding =
  * over a multi-valued discriminant does not.
  */
 export function isRename(finding: Finding): finding is RenameFinding {
-  return (
-    finding.kind === "item-rename" ||
-    finding.kind === "location-rename" ||
-    finding.kind === "category-rename"
-  );
+  return finding.kind === "item-rename" || finding.kind === "category-rename";
 }
 
 const norm = (v: string | null) => (v ?? "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -119,7 +115,10 @@ const norm = (v: string | null) => (v ?? "").replace(/\s+/g, " ").trim().toLower
  * were only ever a workaround for the model that could not express it. Three
  * rows called "Tents" in three rooms is one kind of tent in three rooms.
  */
-export function findDuplicates(equipment: Equipment[]): DuplicateFinding[] {
+export function findDuplicates(
+  equipment: Equipment[],
+  roomLabels: Map<string, string> = new Map(),
+): DuplicateFinding[] {
   const groups = new Map<string, Equipment[]>();
 
   for (const item of equipment) {
@@ -136,27 +135,29 @@ export function findDuplicates(equipment: Equipment[]): DuplicateFinding[] {
       kind: "duplicate",
       itemIds: rows.map((r) => r.id),
       name: rows[0].name,
-      locations: [...new Set(rows.map((r) => r.location).filter(Boolean))],
+      rooms: [...new Set(rows.map((r) => roomLabels.get(r.id) ?? "").filter(Boolean))],
     });
   }
   return findings.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
- * Spellings of a room or category that differ only by case or spacing.
+ * Category spellings that differ only by case or spacing.
  *
- * Computed rather than asked, because "Store Room" and "store  room" being
- * the same place isn't a judgement call. The most-used spelling wins, since
- * that is the one people are actually typing.
+ * Computed rather than asked, because "Pioneering" and "pioneering " being
+ * the same category isn't a judgement call. The most-used spelling wins,
+ * since that is the one people are actually typing.
+ *
+ * This used to do rooms as well, and no longer needs to: a room is a row in
+ * public.rooms with a unique index on lower(btrim(name)), so two spellings
+ * of one room cannot exist for this to find. Categories are still free text
+ * on the item, so they still can.
  */
-export function findCasingVariants(
-  equipment: Equipment[],
-  field: "location" | "category",
-): VariantFinding[] {
+export function findCasingVariants(equipment: Equipment[]): VariantFinding[] {
   const byNormalised = new Map<string, Map<string, number>>();
 
   for (const item of equipment) {
-    const raw = field === "location" ? item.location : item.category;
+    const raw = item.category;
     if (!raw?.trim()) continue;
     const key = norm(raw);
     const spellings = byNormalised.get(key) ?? new Map<string, number>();
@@ -179,7 +180,7 @@ export function findCasingVariants(
     const [canonical] = ranked[0];
     const variants = ranked.slice(1).map(([spelling]) => spelling);
     findings.push({
-      kind: field === "location" ? "location-variants" : "category-variants",
+      kind: "category-variants",
       canonical,
       variants,
       affected: ranked.slice(1).reduce((sum, [, count]) => sum + count, 0),
@@ -190,11 +191,14 @@ export function findCasingVariants(
 }
 
 /** Everything that can be found without asking a model. */
-export function findExactProblems(equipment: Equipment[]): Finding[] {
+export function findExactProblems(
+  equipment: Equipment[],
+  /** Room label per item id, for describing duplicate rows. */
+  roomLabels: Map<string, string> = new Map(),
+): Finding[] {
   return [
-    ...findDuplicates(equipment),
-    ...findCasingVariants(equipment, "location"),
-    ...findCasingVariants(equipment, "category"),
+    ...findDuplicates(equipment, roomLabels),
+    ...findCasingVariants(equipment),
   ];
 }
 
@@ -292,18 +296,16 @@ export function verifyRenameFindings(
 ): RenameFinding[] {
   const counts = {
     item: new Map<string, number>(),
-    location: new Map<string, number>(),
     category: new Map<string, number>(),
   };
-  const taken = { item: new Set<string>(), location: new Set<string>(), category: new Set<string>() };
+  const taken = { item: new Set<string>(), category: new Set<string>() };
 
   for (const row of equipment) {
     const values = {
       item: row.name,
-      location: row.location,
       category: row.category,
     };
-    for (const field of ["item", "location", "category"] as const) {
+    for (const field of ["item", "category"] as const) {
       const value = values[field];
       if (!value?.trim()) continue;
       counts[field].set(value, (counts[field].get(value) ?? 0) + 1);
@@ -333,11 +335,9 @@ export function verifyRenameFindings(
     const field =
       finding.kind === "item-rename"
         ? "item"
-        : finding.kind === "location-rename"
-          ? "location"
-          : finding.kind === "category-rename"
-            ? "category"
-            : null;
+        : finding.kind === "category-rename"
+          ? "category"
+          : null;
     if (!field) continue;
 
     const from = typeof finding.from === "string" ? finding.from.trim() : "";
@@ -360,8 +360,7 @@ export function verifyRenameFindings(
 
     spokenFor.add(norm(from));
     out.push({
-      kind: field === "item" ? "item-rename" : field === "location"
-        ? "location-rename" : "category-rename",
+      kind: field === "item" ? "item-rename" : "category-rename",
       from,
       to,
       affected,
@@ -386,24 +385,16 @@ export function verifyFindings(
   equipment: Equipment[],
   already: Finding[],
 ): VariantFinding[] {
-  const counts = {
-    location: new Map<string, number>(),
-    category: new Map<string, number>(),
-  };
+  const counts = new Map<string, number>();
   for (const item of equipment) {
-    for (const field of ["location", "category"] as const) {
-      const value = field === "location" ? item.location : item.category;
-      if (value?.trim()) counts[field].set(value, (counts[field].get(value) ?? 0) + 1);
-    }
+    const value = item.category;
+    if (value?.trim()) counts.set(value, (counts.get(value) ?? 0) + 1);
   }
 
   // Don't repeat something the exact pass already found.
   const seen = new Set(
     already
-      .filter(
-        (f): f is VariantFinding =>
-          f.kind === "location-variants" || f.kind === "category-variants",
-      )
+      .filter((f): f is VariantFinding => f.kind === "category-variants")
       .flatMap((f) => f.variants.map((v) => norm(v))),
   );
 
@@ -415,22 +406,16 @@ export function verifyFindings(
     // any shape at all, so nothing about it can be assumed.
     if (!finding || typeof finding !== "object") continue;
 
-    const field =
-      finding.kind === "location-variants"
-        ? "location"
-        : finding.kind === "category-variants"
-          ? "category"
-          : null;
-    if (!field) continue;
+    if (finding.kind !== "category-variants") continue;
 
     const canonical = typeof finding.canonical === "string" ? finding.canonical.trim() : "";
-    if (!canonical || !counts[field].has(canonical)) continue;
+    if (!canonical || !counts.has(canonical)) continue;
 
     const variants = Array.isArray(finding.variants)
       ? finding.variants.filter(
           (v): v is string =>
             typeof v === "string" &&
-            counts[field].has(v.trim()) &&
+            counts.has(v.trim()) &&
             norm(v) !== norm(canonical) &&
             !seen.has(norm(v)),
         )
@@ -440,11 +425,11 @@ export function verifyFindings(
     for (const v of variants) seen.add(norm(v));
 
     out.push({
-      kind: field === "location" ? "location-variants" : "category-variants",
+      kind: "category-variants",
       canonical,
       variants: variants.map((v) => v.trim()),
-      affected: variants.reduce((sum, v) => sum + (counts[field].get(v.trim()) ?? 0), 0),
-      why: (finding.why ?? "").trim() || "Looks like the same place spelled differently.",
+      affected: variants.reduce((sum, v) => sum + (counts.get(v.trim()) ?? 0), 0),
+      why: (finding.why ?? "").trim() || "Looks like the same category spelled differently.",
     });
   }
 
@@ -509,19 +494,13 @@ export function verifyItemFindings(
 /** A short, plain description of what applying a finding would do. */
 export function describeFix(finding: Finding): string {
   if (isRename(finding)) {
-    const noun =
-      finding.kind === "item-rename"
-        ? "item"
-        : finding.kind === "location-rename"
-          ? "item's room"
-          : "item's category";
+    const noun = finding.kind === "item-rename" ? "item" : "item's category";
     return `Rename to "${finding.to}" on ${finding.affected} ${noun}${
       finding.affected === 1 ? "" : "s"
     }. Nothing is merged or deleted, and it can be renamed back.`;
   }
   if (finding.kind === "duplicate") {
-    const where =
-      finding.locations.length > 1 ? ` across ${finding.locations.join(", ")}` : "";
+    const where = finding.rooms.length > 1 ? ` across ${finding.rooms.join(", ")}` : "";
     return (
       `Merge ${finding.itemIds.length} rows${where} into one. Quantities add up, ` +
       "and every room and box each row was in is kept."
@@ -532,8 +511,7 @@ export function describeFix(finding: Finding): string {
     return `Merge ${names} into "${finding.canonical}". Quantities add up and every room and box each was in is kept.`;
   }
   const list = finding.variants.map((v) => `"${v}"`).join(", ");
-  const noun = finding.kind === "location-variants" ? "item" : "item";
-  return `Rename ${list} to "${finding.canonical}" on ${finding.affected} ${noun}${
+  return `Rename ${list} to "${finding.canonical}" on ${finding.affected} item${
     finding.affected === 1 ? "" : "s"
   }.`;
 }

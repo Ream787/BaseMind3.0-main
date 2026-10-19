@@ -61,7 +61,7 @@ import {
 } from "@/lib/placements";
 import { LoanFormDialog } from "@/components/loans/LoanFormDialog";
 import { SectionTabs, EQUIPMENT_TABS } from "@/components/layout/SectionTabs";
-import { groupKeyFor, UNGROUPED_LABEL, type GroupBy } from "@/lib/groupEquipment";
+import { categoryKeyFor, type GroupBy } from "@/lib/groupEquipment";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
 
 const CONDITION_FILTERS: (EquipmentCondition | "All")[] = [
@@ -75,7 +75,7 @@ const CONDITION_FILTERS: (EquipmentCondition | "All")[] = [
 type View = "all" | GroupBy;
 
 const VIEW_OPTIONS: { value: View; label: string }[] = [
-  { value: "location", label: "By room" },
+  { value: "room", label: "By room" },
   { value: "category", label: "By category" },
   { value: "all", label: "All items" },
 ];
@@ -89,7 +89,7 @@ export function EquipmentPage() {
   const navigate = useNavigate();
   const { hasRole, profile } = useAuth();
   const { online } = useOffline();
-  const { equipment, loading, error } = useEquipment();
+  const { equipment, rooms, roomsById, loading, error } = useEquipment();
   const [checking, setChecking] = useState<Equipment | null>(null);
   const [viewing, setViewing] = useState<Equipment | null>(null);
   const [cleanupOpen, setCleanupOpen] = useState(false);
@@ -100,7 +100,7 @@ export function EquipmentPage() {
   const [users, setUsers] = useState<UserOption[]>([]);
   const [search, setSearch] = useState("");
   const [conditionFilter, setConditionFilter] = useState<EquipmentCondition | "All">("All");
-  const [view, setView] = useState<View>("location");
+  const [view, setView] = useState<View>("room");
 
   /**
    * Which room is open, kept in the URL rather than in component state.
@@ -111,10 +111,25 @@ export function EquipmentPage() {
    */
   const [params, setParams] = useSearchParams();
   const openRoomName = params.get("room");
-  const openGroup = useMemo(
-    () => (openRoomName ? { key: roomKey(openRoomName), name: openRoomName } : null),
-    [openRoomName],
-  );
+  /**
+   * The open bucket: a room in the room view, a category in the category
+   * view, with `key` the room's id or the folded category name.
+   *
+   * The URL keeps the room's NAME rather than its id — it is readable, it
+   * survives being written down, and scanning a QR sticker navigates away
+   * and back and has to land in the same room. It is resolved against the
+   * rooms list here, once. A name that no longer matches any room falls
+   * back to itself, so a renamed or deleted room shows an empty room rather
+   * than silently opening a different one.
+   */
+  const openGroup = useMemo(() => {
+    if (!openRoomName) return null;
+    if (view === "room") {
+      const room = rooms.find((r) => roomKey(r.name) === roomKey(openRoomName));
+      if (room) return { key: room.id, name: room.name };
+    }
+    return { key: roomKey(openRoomName), name: openRoomName };
+  }, [openRoomName, view, rooms]);
 
   const setOpenGroup = useCallback(
     (group: { key: string; name: string } | null) => {
@@ -179,53 +194,40 @@ export function EquipmentPage() {
   const boxesById = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
   const placementsByItem = useMemo(() => byEquipment(placements), [placements]);
 
-  /**
-   * Every room a person could file something in.
-   *
-   * Built from where things actually are — placements and the rooms the
-   * storage places stand in — plus the older `location` column, which is
-   * still what an item carries until it is placed. Reading only that column
-   * left rooms that exist out of the list: Room 2 held two tents by
-   * placement, so it appeared on the inventory but could not be chosen when
-   * adding the next thing to it.
-   */
-  const locations = useMemo(() => {
-    const names = new Map<string, string>();
-    for (const { key, name } of roomsInUse(placements, boxes)) names.set(key, name);
-    for (const item of equipment) {
-      const name = item.location?.trim();
-      if (name) names.set(name.toLowerCase(), name);
-    }
-    return [...names.values()].sort((a, b) =>
-      a.localeCompare(b, undefined, { sensitivity: "base" }),
-    );
-  }, [equipment, placements, boxes]);
-
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return equipment.filter((item) => {
-      // Searching includes where the thing is now — the room it is placed in
-      // and the box it is in — not just the room column. "Impalas" used to
-      // miss a tent standing in Impalas, and a box name could not be
-      // searched at all although the list prints it in the Where column.
+      // Searching covers where the thing actually is — the room it is
+      // placed in and the box it is in. That is the whole of it now: there
+      // is no room column on the item to search separately, and the
+      // placement description is the only thing that knows about boxes.
       const matchesSearch =
         !term ||
         item.name.toLowerCase().includes(term) ||
-        item.location.toLowerCase().includes(term) ||
         (item.category ?? "").toLowerCase().includes(term) ||
-        describePlacements(item, placementsByItem.get(item.id) ?? [], boxesById)
+        describePlacements(item, placementsByItem.get(item.id) ?? [], boxesById, roomsById)
           .toLowerCase()
           .includes(term);
       const matchesCondition = conditionFilter === "All" || item.condition === conditionFilter;
       return matchesSearch && matchesCondition;
     });
-  }, [equipment, search, conditionFilter, placementsByItem, boxesById]);
+  }, [equipment, search, conditionFilter, placementsByItem, boxesById, roomsById]);
 
   // Inside an open room/category, narrow further to just that group's items.
   const visibleItems = useMemo(() => {
     if (view === "all" || openGroup === null) return filtered;
-    return filtered.filter((item) => groupKeyFor(item, view) === openGroup.key);
-  }, [filtered, view, openGroup]);
+    if (view === "category") {
+      return filtered.filter((item) => categoryKeyFor(item) === openGroup.key);
+    }
+    // A room holds what the placements say it holds, and one item can be in
+    // two rooms at once — so membership cannot come off the item.
+    const inRoom = new Set(
+      placements
+        .filter((p) => roomOf(p, boxesById) === openGroup.key)
+        .map((p) => p.equipment_id),
+    );
+    return filtered.filter((item) => inRoom.has(item.id));
+  }, [filtered, view, openGroup, placements, boxesById]);
 
   const equipmentById = useMemo(
     () => new Map(equipment.map((e) => [e.id, e])),
@@ -243,7 +245,7 @@ export function EquipmentPage() {
     const map = new Map<string, typeof boxes>();
     for (const box of boxes) {
       if (box.parent_id !== null) continue;
-      const key = roomKey(box.location.trim() || UNGROUPED_LABEL.location);
+      const key = box.room_id;
       const bucket = map.get(key);
       if (bucket) bucket.push(box);
       else map.set(key, [box]);
@@ -260,14 +262,14 @@ export function EquipmentPage() {
    * The rooms, built from placements rather than from a column on the item.
    *
    * This is what lets four tents be in the loft and two in the container:
-   * grouping by item.location can only ever put a row in one bucket, and the
+   * one room on the item could only ever put a row in one bucket, and the
    * whole point of placements is that one item is in several places.
    */
   const roomGroups = useMemo(() => {
-    if (view !== "location") return undefined;
+    if (view !== "room") return undefined;
 
     const visible = new Set(filtered.map((item) => item.id));
-    const rooms = roomsInUse(placements, boxes);
+    const used = roomsInUse(placements, boxes, roomsById);
 
     // While a search or a condition filter is on, a room with nothing in it
     // is not an answer. The list used to show every room reading "0 items ·
@@ -275,26 +277,25 @@ export function EquipmentPage() {
     // found something in a room further down.
     const filtering = search.trim() !== "" || conditionFilter !== "All";
 
-    return rooms.map(({ key, name }) => {
-      const inRoom = placements.filter((p) => {
-        const room = roomOf(p, boxesById);
-        return room !== null && roomKey(room) === key && visible.has(p.equipment_id);
-      });
+    return used.map(({ id, name }) => {
+      const inRoom = placements.filter(
+        (p) => roomOf(p, boxesById) === id && visible.has(p.equipment_id),
+      );
       const items = [...new Set(inRoom.map((p) => p.equipment_id))]
         .map((id) => equipmentById.get(id))
         .filter((item): item is (typeof equipment)[number] => !!item);
       return {
-        key,
+        key: id,
         name,
         items,
         totalQuantity: inRoom.reduce((sum, p) => sum + p.quantity, 0),
         needsAttention: items.filter((item) => item.condition !== "Good").length,
       };
     }).filter((group) => !filtering || group.items.length > 0);
-  }, [view, filtered, placements, boxes, boxesById, equipmentById, search, conditionFilter]);
+  }, [view, filtered, placements, boxes, boxesById, roomsById, equipmentById, search, conditionFilter]);
 
   const openRoomBoxes = useMemo(
-    () => (view === "location" && openGroup ? (boxesByRoom.get(openGroup.key) ?? []) : []),
+    () => (view === "room" && openGroup ? (boxesByRoom.get(openGroup.key) ?? []) : []),
     [view, openGroup, boxesByRoom],
   );
 
@@ -318,9 +319,9 @@ export function EquipmentPage() {
    * the room rather than a copy of it.
    */
   const looseItems = useMemo(() => {
-    if (view !== "location" || !openGroup) return visibleItems;
+    if (view !== "room" || !openGroup) return visibleItems;
     const visible = new Set(filtered.map((item) => item.id));
-    return looseInRoom(openGroup.name, placements, equipmentById)
+    return looseInRoom(openGroup.key, placements, equipmentById)
       .map(({ item }) => item)
       .filter((item) => visible.has(item.id));
   }, [view, openGroup, placements, equipmentById, visibleItems, filtered]);
@@ -334,8 +335,8 @@ export function EquipmentPage() {
    */
   const strays = useMemo(
     () =>
-      view === "location" && openGroup
-        ? strayLooseItems(openGroup.name, placements, boxes, equipmentById)
+      view === "room" && openGroup
+        ? strayLooseItems(openGroup.key, placements, boxes, equipmentById)
         : [],
     [view, openGroup, placements, boxes, equipmentById],
   );
@@ -346,20 +347,23 @@ export function EquipmentPage() {
     for (const item of equipment) {
       map.set(
         item.id,
-        describePlacements(item, placementsByItem.get(item.id) ?? [], boxesById),
+        describePlacements(item, placementsByItem.get(item.id) ?? [], boxesById, roomsById),
       );
     }
     return map;
-  }, [equipment, placementsByItem, boxesById]);
+  }, [equipment, placementsByItem, boxesById, roomsById]);
 
   /** The same, split by place, for the phone cards to stack. */
   const placementDetail = useMemo(() => {
     const map = new Map<string, ReturnType<typeof placementParts>>();
     for (const item of equipment) {
-      map.set(item.id, placementParts(item, placementsByItem.get(item.id) ?? [], boxesById));
+      map.set(
+        item.id,
+        placementParts(item, placementsByItem.get(item.id) ?? [], boxesById, roomsById),
+      );
     }
     return map;
-  }, [equipment, placementsByItem, boxesById]);
+  }, [equipment, placementsByItem, boxesById, roomsById]);
 
   function changeView(next: View) {
     setView(next);
@@ -427,7 +431,7 @@ export function EquipmentPage() {
       .insert({
         code,
         created_by: profile?.id ?? null,
-        ...(view === "location" && openGroup ? { location: openGroup.name } : {}),
+        ...(view === "room" && openGroup ? { room_id: openGroup.key } : {}),
       })
       .select()
       .single();
@@ -445,7 +449,7 @@ export function EquipmentPage() {
       .insert({
         code: generateBoxCode(),
         created_by: profile?.id ?? null,
-        ...(view === "location" && openGroup ? { location: openGroup.name } : {}),
+        ...(view === "room" && openGroup ? { room_id: openGroup.key } : {}),
       })
       .select()
       .single();
@@ -471,7 +475,7 @@ export function EquipmentPage() {
                 className="mb-1 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
               >
                 <ArrowLeft className="size-4" />
-                {view === "location" ? "All rooms" : "All categories"}
+                {view === "room" ? "All rooms" : "All categories"}
               </button>
               <h1>{openGroup.name}</h1>
               <p className="text-sm text-muted-foreground">
@@ -594,12 +598,12 @@ export function EquipmentPage() {
           items={filtered}
           groupBy={view}
           onSelect={setOpenGroup}
-          boxCounts={view === "location" ? boxCounts : undefined}
+          boxCounts={view === "room" ? boxCounts : undefined}
           groups={roomGroups}
         />
       ) : (
         <>
-          {view === "location" && openGroup && (
+          {view === "room" && openGroup && (
             <section className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-sm font-medium text-muted-foreground">
@@ -653,7 +657,7 @@ export function EquipmentPage() {
             </section>
           )}
 
-          {view === "location" && openGroup && looseItems.length > 0 && (
+          {view === "room" && openGroup && looseItems.length > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-medium text-muted-foreground">
                 Loose in this room
@@ -724,7 +728,7 @@ export function EquipmentPage() {
         <PutAwayDialog
           open={puttingAway}
           onOpenChange={setPuttingAway}
-          room={openGroup.name}
+          roomName={openGroup.name}
           strays={strays}
         />
       )}
@@ -736,12 +740,12 @@ export function EquipmentPage() {
       />
 
       <EquipmentFormDialog
-        defaultLocation={view === "location" ? (openGroup?.name ?? undefined) : undefined}
+        defaultRoomId={view === "room" ? (openGroup?.key ?? undefined) : undefined}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         equipment={editingItem}
         categories={categories}
-        locations={locations}
+        rooms={rooms}
         users={users}
       />
 

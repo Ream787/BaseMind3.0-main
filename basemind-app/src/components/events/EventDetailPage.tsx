@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
+import { useRoomLabels } from "@/lib/useRoomLabels";
 import type { CampEvent } from "@/types/database";
 import { useOffline } from "@/context/OfflineContext";
 import { useFeatures } from "@/context/FeaturesContext";
@@ -64,6 +65,7 @@ import { SafetyPlanSection } from "@/components/safety/SafetyPlanSection";
 
 export function EventDetailPage() {
   const { eventId } = useParams();
+  const { roomLabel } = useRoomLabels();
   const navigate = useNavigate();
   const { addRow } = useOffline();
   const { isEnabled } = useFeatures();
@@ -362,7 +364,11 @@ export function EventDetailPage() {
           day,
           meals: dayMeals.map((m) => ({ slot: m.meal_slot, name: m.name, notes: m.notes })),
         })),
-        packing: packing.map(({ equipment: item, quantity }) => ({ equipment: item, quantity })),
+        packing: packing.map(({ equipment: item, quantity }) => ({
+          equipment: item,
+          quantity,
+          where: roomLabel(item.id),
+        })),
         foodPlan,
         shopping,
         safety: safetyBlock,
@@ -467,7 +473,7 @@ export function EventDetailPage() {
                   ) : (
                     unusedEquipment.map((item) => (
                       <SelectItem key={item.id} value={item.id}>
-                        {item.name} ({item.location})
+                        {item.name} ({roomLabel(item.id)})
                       </SelectItem>
                     ))
                   )}
@@ -532,7 +538,7 @@ export function EventDetailPage() {
                     </TableCell>
                     <TableCell className="font-medium">{line.equipment.name}</TableCell>
                     <TableCell className="text-muted-foreground">
-                      {line.equipment.location}
+                      {roomLabel(line.equipment.id)}
                     </TableCell>
                     <TableCell>
                       {line.equipment.condition === "Good" ? (

@@ -1,16 +1,45 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { supabase } from "@/lib/supabase/client";
-import type { Equipment, NewEquipment, EquipmentUpdate } from "@/types/database";
+import { groupByItem, labelFor, type ItemRoom } from "@/lib/useRoomLabels";
+import type {
+  Equipment,
+  NewEquipment,
+  EquipmentUpdate,
+  Room,
+} from "@/types/database";
 
 interface EquipmentContextType {
   equipment: Equipment[];
+  /** Every room, including ones with nothing in them. */
+  rooms: Room[];
+  roomsById: Map<string, Room>;
   loading: boolean;
   error: string | null;
   /** Returns the created row, so the caller can file it in a room. */
   addEquipment: (input: NewEquipment) => Promise<Equipment>;
   updateEquipment: (id: string, patch: EquipmentUpdate) => Promise<void>;
   deleteEquipment: (id: string) => Promise<void>;
+  /**
+   * A short "where is it" label for one item: the room, or each room and
+   * how many are there when its units are split up, or a dash when nothing
+   * is filed anywhere.
+   *
+   * This is what the old equipment.location column was asked for in lists,
+   * printouts and pickers. It reads the equipment_rooms view, so it counts
+   * the contents of boxes as being in the room the box stands in.
+   */
+  roomLabel: (equipmentId: string) => string;
+  /** Resolve a room name to a room, creating it if it is new. */
+  roomIdFor: (name: string) => Promise<string>;
 }
 
 const EquipmentContext = createContext<EquipmentContextType | undefined>(undefined);
@@ -21,8 +50,28 @@ function sortByName(rows: Equipment[]) {
 
 export function EquipmentProvider({ children }: { children: ReactNode }) {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [itemRooms, setItemRooms] = useState<ItemRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const loadRooms = useCallback(async () => {
+    const { data, error: fetchError } = await supabase
+      .from("rooms")
+      .select("*")
+      .order("sort_order")
+      .order("name");
+    if (fetchError) setError(fetchError.message);
+    else setRooms(data ?? []);
+  }, []);
+
+  // equipment_rooms is a view, and a view cannot be streamed over realtime,
+  // so placement and room events re-read it rather than patching rows.
+  const loadItemRooms = useCallback(async () => {
+    const { data, error: fetchError } = await supabase.from("equipment_rooms").select("*");
+    if (fetchError) setError(fetchError.message);
+    else setItemRooms(data ?? []);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -38,6 +87,8 @@ export function EquipmentProvider({ children }: { children: ReactNode }) {
       } else {
         setEquipment(data ?? []);
       }
+      await Promise.all([loadRooms(), loadItemRooms()]);
+      if (!active) return;
       setLoading(false);
     }
     load();
@@ -74,13 +125,42 @@ export function EquipmentProvider({ children }: { children: ReactNode }) {
           });
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "equipment_placements" },
+        () => {
+          void loadItemRooms();
+        },
+      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "rooms" }, () => {
+        // A rename arrives here. The name lives in one place now, so
+        // re-reading is the whole of following it.
+        void loadRooms();
+        void loadItemRooms();
+      })
       .subscribe();
 
     return () => {
       active = false;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [loadRooms, loadItemRooms]);
+
+  const roomsById = useMemo(() => new Map(rooms.map((r) => [r.id, r])), [rooms]);
+
+  const roomsByItem = useMemo(() => groupByItem(itemRooms), [itemRooms]);
+
+  const roomLabel = useCallback(
+    (equipmentId: string) => labelFor(roomsByItem.get(equipmentId)),
+    [roomsByItem],
+  );
+
+  const roomIdFor = useCallback(async (name: string) => {
+    const { data, error: rpcError } = await supabase.rpc("room_id_for", { p_name: name });
+    if (rpcError) throw rpcError;
+    await loadRooms();
+    return data;
+  }, [loadRooms]);
 
   async function addEquipment(input: NewEquipment): Promise<Equipment> {
     const { data, error: insertError } = await supabase
@@ -104,7 +184,18 @@ export function EquipmentProvider({ children }: { children: ReactNode }) {
 
   return (
     <EquipmentContext.Provider
-      value={{ equipment, loading, error, addEquipment, updateEquipment, deleteEquipment }}
+      value={{
+        equipment,
+        rooms,
+        roomsById,
+        loading,
+        error,
+        addEquipment,
+        updateEquipment,
+        deleteEquipment,
+        roomLabel,
+        roomIdFor,
+      }}
     >
       {children}
     </EquipmentContext.Provider>

@@ -7,7 +7,7 @@
 // same place as "Store Room"? Is "Contaner" the container? A person reads
 // those instantly and a regex does not.
 //
-// What gets sent is names only: the distinct rooms and categories with
+// What gets sent is names only: the distinct categories and item names with
 // counts, and the item names. Not quantities, conditions, notes or dates —
 // the question is "are these two strings the same thing", and everything
 // else would cost quota to tell it nothing.
@@ -42,17 +42,13 @@ const corsHeaders = {
 
 type Tally = { value: string; count: number };
 
-function buildPrompt(
-  locations: Tally[],
-  categories: Tally[],
-  items: string[],
-): string {
+function buildPrompt(categories: Tally[], items: string[]): string {
   const list = (rows: Tally[]) =>
     rows.map((r) => `- ${JSON.stringify(r.value)} (used by ${r.count} items)`).join("\n");
 
   return [
     "You are tidying the equipment list of a Scout group. Below are the",
-    "room names and category names currently in use, with how many items",
+    "category names and item names currently in use, with how many items",
     "use each.",
     "",
     "Find values that are THE SAME THING typed differently: a misspelling,",
@@ -121,15 +117,13 @@ function buildPrompt(
     "  suggestion as obviously right.",
     "",
     'Reply as JSON: {"findings": [ ... ]} where each finding is either',
-    'a grouping: {"kind": "location-variants" | "category-variants" |',
-    '"item-variants", "canonical": string, "variants": string[], "why": string}',
-    'or a correction: {"kind": "item-rename" | "location-rename" |',
-    '"category-rename", "from": string, "to": string, "why": string}',
+    'a grouping: {"kind": "category-variants" | "item-variants",',
+    '"canonical": string, "variants": string[], "why": string}',
+    'or a correction: {"kind": "item-rename" | "category-rename",',
+    '"from": string, "to": string, "why": string}',
     '"from" must be a value exactly as it appears in the lists below.',
     '"why" is one short sentence a leader would find obvious, e.g.',
     '"Store Room is misspelled here." or "Everything else is singular."',
-    "",
-    `ROOMS:\n${list(locations) || "- (none)"}`,
     "",
     `CATEGORIES:\n${list(categories) || "- (none)"}`,
     "",
@@ -188,20 +182,22 @@ Deno.serve(async (req: Request) => {
       return json({ error: "Only signed-in members can tidy the inventory." }, 401);
     }
 
-    const { locations, categories, items } = (await req.json()) as {
-      locations?: Tally[];
+    // Rooms are not asked about any more: they are rows in public.rooms,
+    // unique on lower(btrim(name)), so two spellings of one room cannot
+    // exist for the model to spot. Asking spent quota on a question with no
+    // possible answer. Categories are still free text on the item.
+    const { categories, items } = (await req.json()) as {
       categories?: Tally[];
       items?: string[];
     };
 
-    const rooms = Array.isArray(locations) ? locations.slice(0, 200) : [];
     const cats = Array.isArray(categories) ? categories.slice(0, 200) : [];
     const names = Array.isArray(items)
       ? items.filter((n): n is string => typeof n === "string").slice(0, 500)
       : [];
 
     // Nothing to compare against itself.
-    if (rooms.length + cats.length + names.length < 2) return json({ findings: [] });
+    if (cats.length + names.length < 2) return json({ findings: [] });
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,
@@ -209,7 +205,7 @@ Deno.serve(async (req: Request) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: buildPrompt(rooms, cats, names) }] }],
+          contents: [{ parts: [{ text: buildPrompt(cats, names) }] }],
           generationConfig: {
             // This is a matching job, not a writing one.
             temperature: 0,

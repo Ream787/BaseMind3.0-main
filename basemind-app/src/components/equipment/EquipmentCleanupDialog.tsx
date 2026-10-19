@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, Loader2, Merge, Sparkles, Type } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
+import { useEquipment } from "@/context/EquipmentContext";
 import {
   describeFix,
   findExactProblems,
@@ -48,13 +49,17 @@ export function EquipmentCleanupDialog({
   onOpenChange: (open: boolean) => void;
   equipment: Equipment[];
 }) {
+  const { roomLabel } = useEquipment();
   const [suggested, setSuggested] = useState<Finding[]>([]);
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState<string | null>(null);
   const [applying, setApplying] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
 
-  const exact = findExactProblems(equipment);
+  const exact = useMemo(
+    () => findExactProblems(equipment, new Map(equipment.map((i) => [i.id, roomLabel(i.id)]))),
+    [equipment, roomLabel],
+  );
 
   useEffect(() => {
     if (!open) {
@@ -68,13 +73,18 @@ export function EquipmentCleanupDialog({
     setAsking(true);
     setAskError(null);
 
-    // Only the distinct room and category names go to the model, with counts.
-    // The question is about a few dozen short strings; sending the whole
+    // Only the distinct category names go to the model, with counts. The
+    // question is about a few dozen short strings; sending the whole
     // inventory would spend quota to tell it nothing.
-    const tally = (field: "location" | "category") => {
+    //
+    // Rooms are not asked about any more. They are rows in public.rooms,
+    // unique on lower(btrim(name)), so two spellings of one room cannot
+    // exist for the model to spot — and correcting a room's name is one
+    // edit on that row rather than a sweep across the inventory.
+    const tally = () => {
       const counts = new Map<string, number>();
       for (const item of equipment) {
-        const value = field === "location" ? item.location : item.category;
+        const value = item.category;
         if (value?.trim()) counts.set(value, (counts.get(value) ?? 0) + 1);
       }
       return [...counts.entries()].map(([value, count]) => ({ value, count }));
@@ -83,8 +93,7 @@ export function EquipmentCleanupDialog({
     supabase.functions
       .invoke("equipment-cleanup", {
         body: {
-          locations: tally("location"),
-          categories: tally("category"),
+          categories: tally(),
           // Names go too, so "Rope" and "Ropes" can be spotted as one thing.
           items: equipment.map((item) => item.name),
         },
@@ -133,38 +142,25 @@ export function EquipmentCleanupDialog({
       // Named per column for the same reason as below: the SET and the WHERE
       // have to be the same real column, and a computed key hides a mismatch
       // between them from the compiler.
+      // Named per column rather than keyed dynamically: the SET and the
+      // WHERE have to be the same real column, and a computed key hides a
+      // mismatch between them from the compiler.
+      //
+      // Renaming a room used to need three of these — items, storage places
+      // and placements — and getting one wrong split one room into two.
+      // A room's name lives in one row now, so it is not renamed from here
+      // at all.
       const { error } =
         finding.kind === "item-rename"
           ? await supabase
               .from("equipment")
               .update({ name: finding.to })
               .eq("name", finding.from)
-          : finding.kind === "location-rename"
-            ? await supabase
-                .from("equipment")
-                .update({ location: finding.to })
-                .eq("location", finding.from)
-            : await supabase
-                .from("equipment")
-                .update({ category: finding.to })
-                .eq("category", finding.from);
+          : await supabase
+              .from("equipment")
+              .update({ category: finding.to })
+              .eq("category", finding.from);
       if (error) throw new Error(error.message);
-
-      // A room lives on storage places too, and renaming it on the items
-      // while leaving the boxes behind would split one room into two.
-      if (finding.kind === "location-rename") {
-        const { error: placeError } = await supabase
-          .from("storage_places")
-          .update({ location: finding.to })
-          .eq("location", finding.from);
-        if (placeError) throw new Error(placeError.message);
-
-        const { error: placementError } = await supabase
-          .from("equipment_placements")
-          .update({ location: finding.to })
-          .eq("location", finding.from);
-        if (placementError) throw new Error(placementError.message);
-      }
 
       toast.success(`Renamed to "${finding.to}"`);
     } catch (err) {
@@ -176,25 +172,16 @@ export function EquipmentCleanupDialog({
   }
 
   async function applyRename(finding: Finding) {
-    // Narrowed to the two spelling kinds: the other two merge rows rather
-    // than rename a value, and their `variants` are rows, not strings.
-    if (finding.kind !== "location-variants" && finding.kind !== "category-variants") return;
-    const isLocation = finding.kind === "location-variants";
+    // Narrowed to the one spelling kind: the others merge rows rather than
+    // rename a value, and their `variants` are rows, not strings.
+    if (finding.kind !== "category-variants") return;
     setApplying(keyOf(finding));
     try {
-      // Spelled out per column rather than keyed dynamically: the update and
-      // the filter have to name the same real column, and a computed key
-      // hides a mismatch between them from the compiler.
       for (const variant of finding.variants) {
-        const { error } = isLocation
-          ? await supabase
-              .from("equipment")
-              .update({ location: finding.canonical })
-              .eq("location", variant)
-          : await supabase
-              .from("equipment")
-              .update({ category: finding.canonical })
-              .eq("category", variant);
+        const { error } = await supabase
+          .from("equipment")
+          .update({ category: finding.canonical })
+          .eq("category", variant);
         if (error) throw new Error(error.message);
       }
       toast.success(`Renamed to "${finding.canonical}"`);

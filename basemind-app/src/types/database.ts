@@ -37,7 +37,6 @@ export type Equipment = {
   name: string;
   category: string | null;
   quantity: number;
-  location: string;
   condition: EquipmentCondition;
   notes: string | null;
   date_last_checked: string | null;
@@ -181,6 +180,28 @@ export type PolicyChatMessage = {
 export type NewPolicyChatMessage = Omit<PolicyChatMessage, "id" | "created_at">;
 
 /**
+ * A fixed place in the building that kit lives in: a room, the hall store,
+ * the den.
+ *
+ * One row per room, and the name is unique ignoring case and surrounding
+ * space, so "Room 5" and "room 5" cannot both exist. Everything that used
+ * to carry a room as text now points here by id, which is what makes a
+ * rename one write instead of three.
+ */
+export type Room = {
+  id: string;
+  name: string;
+  notes: string | null;
+  /** Hand-set running order; ties break on name. */
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NewRoom = Pick<Room, "name"> & Partial<Pick<Room, "notes" | "sort_order">>;
+export type RoomUpdate = Partial<NewRoom>;
+
+/**
  * Somewhere in a room that kit is kept: a box, a shelf, a cupboard, the
  * trailer. They nest, so a cupboard can hold shelves.
  */
@@ -192,11 +213,11 @@ export type StoragePlace = {
   /** Box, Shelf, Cupboard, Crate, Trailer... free text on purpose. */
   kind: string;
   /**
-   * The room. Derived for a nested place — a shelf is wherever its cupboard
-   * is — and kept in step by the database, so it is never set by hand on a
-   * child.
+   * The room it stands in. Derived for a nested place — a shelf is wherever
+   * its cupboard is — and kept in step by the database, so it is never set
+   * by hand on a child.
    */
-  location: string;
+  room_id: string;
   /** What it sits inside. Null means it stands in the room itself. */
   parent_id: string | null;
   notes: string | null;
@@ -213,32 +234,33 @@ export type NewStoragePlace = Omit<
   | "updated_at"
   | "name"
   | "kind"
-  | "location"
+  | "room_id"
   | "parent_id"
   | "notes"
   | "created_by"
 > &
   Partial<
-    Pick<StoragePlace, "name" | "kind" | "location" | "parent_id" | "notes" | "created_by">
+    Pick<StoragePlace, "name" | "kind" | "room_id" | "parent_id" | "notes" | "created_by">
   >;
 
 export type StoragePlaceUpdate = Partial<
-  Pick<StoragePlace, "name" | "kind" | "location" | "parent_id" | "notes">
+  Pick<StoragePlace, "name" | "kind" | "room_id" | "parent_id" | "notes">
 >;
 
 /**
  * How many of an item are in one place.
  *
- * Exactly one of storage_id and location is set: kit is either in a storage
- * place, or loose in a room. A stored placement takes its room from that
- * place, so moving a cupboard moves everything in it without touching a
- * single placement.
+ * Exactly one of storage_id and room_id is set — the database enforces it —
+ * so kit is either in a storage place, or loose in a room. A stored
+ * placement has no room of its own: it takes the room of the place holding
+ * it, so moving a cupboard moves everything in it without touching a single
+ * placement.
  */
 export type EquipmentPlacement = {
   id: string;
   equipment_id: string;
   storage_id: string | null;
-  location: string | null;
+  room_id: string | null;
   quantity: number;
   created_at: string;
   updated_at: string;
@@ -477,6 +499,7 @@ export type Database = {
         Partial<UserProfile>
       >;
       equipment: TableDef<Equipment, NewEquipment, EquipmentUpdate>;
+      rooms: TableDef<Room, NewRoom, RoomUpdate>;
       storage_places: TableDef<StoragePlace, NewStoragePlace, StoragePlaceUpdate>;
       equipment_placements: TableDef<EquipmentPlacement, NewEquipmentPlacement>;
       equipment_checks: TableDef<EquipmentCheck, NewEquipmentCheck>;
@@ -500,7 +523,24 @@ export type Database = {
       policy_chats: TableDef<PolicyChat, NewPolicyChat, PolicyChatUpdate>;
       policy_chat_messages: TableDef<PolicyChatMessage, NewPolicyChatMessage>;
     };
-    Views: { [_ in never]: never };
+    Views: {
+      /**
+       * Which rooms each item is in and how many are there, counting both
+       * loose placements and the contents of storage places.
+       *
+       * An item appears once per room, so kit split between two rooms gets
+       * two rows — which the old single location column could not say.
+       */
+      equipment_rooms: {
+        Row: {
+          equipment_id: string;
+          room_id: string;
+          room_name: string;
+          quantity: number;
+        };
+        Relationships: [];
+      };
+    };
     Functions: {
       apply_menu_preset: {
         Args: { preset_id: string; target_event_id: string; target_headcount?: number | null };
@@ -510,12 +550,24 @@ export type Database = {
         Args: {
           p_equipment_id: string;
           p_storage_id: string | null;
-          p_location: string | null;
+          /** Exactly one of p_storage_id and p_room_id may be set. */
+          p_room_id: string | null;
           p_quantity: number;
           /** true adds to what is there; false (default) sets it outright. */
           p_add?: boolean;
         };
         Returns: void;
+      };
+      /**
+       * A room by name, created if nothing is called that yet.
+       *
+       * For the "type a room that isn't in the list" case the old free-text
+       * field handled by accident. Matching ignores case and surrounding
+       * space, so this never makes a second "Room 5".
+       */
+      room_id_for: {
+        Args: { p_name: string };
+        Returns: string;
       };
       /**
        * Move units off a room's loose pile and into a place standing in it.
