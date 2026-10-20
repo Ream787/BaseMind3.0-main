@@ -64,6 +64,10 @@ export function useRoomLabels(enabled = true) {
     // provider already holds it.
     if (!enabled) return;
     let active = true;
+    // Set here rather than only in the initial state: a dialog that opens
+    // later switches this on, and reporting "not loading" while the first
+    // read is still in flight would be a lie.
+    setLoading(true);
     supabase
       .from("equipment_rooms")
       .select("*")
