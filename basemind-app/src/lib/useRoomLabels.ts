@@ -54,11 +54,15 @@ export function labelFor(where: ItemRoom[] | undefined): string {
  * Inside it, useEquipment().roomLabel is the same thing off data the
  * provider already holds — use that rather than reading the view twice.
  */
-export function useRoomLabels() {
+export function useRoomLabels(enabled = true) {
   const [rows, setRows] = useState<ItemRoom[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
 
   useEffect(() => {
+    // A dialog that is mounted but shut does not need the data, and asking
+    // for it anyway reads the whole view a second time on a page whose
+    // provider already holds it.
+    if (!enabled) return;
     let active = true;
     supabase
       .from("equipment_rooms")
@@ -71,7 +75,7 @@ export function useRoomLabels() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [enabled]);
 
   const byItem = useMemo(() => groupByItem(rows), [rows]);
 

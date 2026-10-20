@@ -85,7 +85,7 @@ export function LoanFormDialog({
   presetEquipmentId,
   editing = null,
 }: LoanFormDialogProps) {
-  const { roomLabel } = useRoomLabels();
+  const { roomLabel } = useRoomLabels(open);
   const [form, setForm] = useState<FormState>(() => emptyForm());
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
