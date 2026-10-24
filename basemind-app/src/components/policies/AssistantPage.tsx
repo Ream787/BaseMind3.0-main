@@ -5,8 +5,12 @@ import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
-import { useRealtimeTable } from "@/lib/useRealtimeTable";
-import { selectPoliciesForPrompt, verifyAnswer, type CheckedAnswer } from "@/lib/policyChat";
+import {
+  fetchPolicyPassages,
+  selectPoliciesForPrompt,
+  verifyAnswer,
+  type CheckedAnswer,
+} from "@/lib/policyChat";
 import {
   buildHistory,
   createChat,
@@ -43,9 +47,28 @@ import {
  */
 export function AssistantPage() {
   const { profile } = useAuth();
-  const { rows: policies, loading: policiesLoading } = useRealtimeTable("policies", {
-    orderBy: "title",
-  });
+
+  /**
+   * How many policies have text in them — not the text itself.
+   *
+   * This used to load every policy in full so the page could choose which
+   * to send. That is 1.27MB before anybody types, and the choosing is now
+   * the database's job, so all that is needed here is whether there is
+   * anything to ask about at all.
+   */
+  const [readableCount, setReadableCount] = useState<number | null>(null);
+  const policiesLoading = readableCount === null;
+
+  useEffect(() => {
+    supabase
+      .from("policies")
+      .select("id", { count: "exact", head: true })
+      .neq("content", "")
+      .then(({ count, error }) => {
+        if (error) toast.error(error.message);
+        setReadableCount(count ?? 0);
+      });
+  }, []);
 
   const [chats, setChats] = useState<SavedChat[]>([]);
   const [chatsLoading, setChatsLoading] = useState(true);
@@ -97,8 +120,7 @@ export function AssistantPage() {
   async function ask(asked: string) {
     if (asking) return;
 
-    const readable = policies.filter((p) => p.content.trim().length > 0);
-    if (readable.length === 0) return;
+    if ((readableCount ?? 0) === 0) return;
 
     setQuestion("");
     setAsking(true);
@@ -112,12 +134,41 @@ export function AssistantPage() {
       { id: pendingId, role: "assistant", content: "", result: null },
     ]);
 
-    const sources = selectPoliciesForPrompt(
-      readable.map((p) => ({ id: p.id, title: p.title, content: p.content })),
-      asked,
-    );
-
     try {
+      // Only the passages that bear on the question, found in the database.
+      // The backstop trim should have nothing to do; it is there so a bug
+      // upstream costs a short prompt rather than the day's quota.
+      const found = await fetchPolicyPassages(asked, async (q) =>
+        await supabase.rpc("search_policy_passages", {
+          p_question: q,
+          p_limit: 8,
+          p_window: 2500,
+          p_per_doc: 2,
+        }),
+      );
+      const sources = selectPoliciesForPrompt(found, asked);
+
+      // Nothing in the policies uses the words of the question. Saying so
+      // costs nothing; asking the model to read nothing and tell us the
+      // same thing costs a slice of the day's quota.
+      if (sources.length === 0) {
+        const result: CheckedAnswer = {
+          answer:
+            "Nothing in the policies mentions this. Try the words the policy itself " +
+            "would use, or name the document you think it is in.",
+          citations: [],
+          rejected: [],
+          unsupported: false,
+          covered: false,
+          related: [],
+        };
+        setMessages((prev) =>
+          prev.map((m) => (m.id === pendingId ? { ...m, content: result.answer, result, searched: 0 } : m)),
+        );
+        await persist(asked, result, 0);
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke("policy-chat", {
         body: { policies: sources, question: asked, history },
       });
@@ -241,7 +292,7 @@ export function AssistantPage() {
         </aside>
 
         <PolicyChat
-          policies={policies}
+          policyCount={readableCount ?? 0}
           messages={messages}
           question={question}
           onQuestionChange={setQuestion}

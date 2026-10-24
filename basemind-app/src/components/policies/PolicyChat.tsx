@@ -3,7 +3,6 @@ import { AlertTriangle, Quote, SearchX, Send, Sparkles } from "lucide-react";
 
 import { useOffline } from "@/context/OfflineContext";
 import { isPending, type ChatMessage } from "@/lib/policyChats";
-import type { Policy } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -36,14 +35,16 @@ function describeSearch(searched: number, total: number): string {
  * what lets a chat reopened from the list look identical to one just asked.
  */
 export function PolicyChat({
-  policies,
+  policyCount,
   messages,
   question,
   onQuestionChange,
   onAsk,
   asking,
 }: {
-  policies: Policy[];
+  /** How many policies have text in them. The documents themselves are no
+   *  longer loaded here: the database picks the passages now. */
+  policyCount: number;
   messages: ChatMessage[];
   question: string;
   onQuestionChange: (value: string) => void;
@@ -52,7 +53,6 @@ export function PolicyChat({
 }) {
   const endRef = useRef<HTMLDivElement>(null);
   const { online } = useOffline();
-  const readable = policies.filter((p) => p.content.trim().length > 0);
 
   /**
    * Why the question box is closed, if it is.
@@ -64,7 +64,7 @@ export function PolicyChat({
    */
   const unavailable = !online
     ? "You're offline — the assistant needs a connection"
-    : readable.length === 0
+    : policyCount === 0
       ? "Add a policy document first"
       : null;
 
@@ -83,7 +83,7 @@ export function PolicyChat({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4">
         {messages.length === 0 ? (
-          <EmptyState count={readable.length} />
+          <EmptyState count={policyCount} />
         ) : (
           messages.map((message) =>
             message.role === "user" ? (
@@ -97,7 +97,7 @@ export function PolicyChat({
               <Answer
                 key={message.id}
                 message={message}
-                total={readable.length}
+                total={policyCount}
                 asking={asking}
                 offline={!online}
                 onAsk={submit}

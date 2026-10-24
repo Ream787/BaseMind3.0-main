@@ -1,5 +1,12 @@
 // Answers questions about the group's policies, quoting them.
 //
+// It is given excerpts rather than whole policies: the caller asks
+// search_policy_passages (migration 0031) for the passages that bear on the
+// question. Sending all eighty documents cost roughly 318,000 tokens per
+// question and exhausted the day's quota in two. The prompt says "excerpts"
+// because that is what they are -- a model told it holds the whole policy
+// reports "the policy does not say" when it is only looking at a window.
+//
 // Runs as an Edge Function so GEMINI_API_KEY stays server-side; a VITE_
 // variable would be readable by anyone who opens devtools.
 //
@@ -65,27 +72,35 @@ function quoteAppearsIn(content: string, quote: string): boolean {
 
 function buildPrompt(policies: Policy[], question: string, history: string): string {
   const documents = policies
-    .map((p) => `### DOCUMENT id=${p.id}\n### TITLE: ${p.title}\n${p.content}`)
+    .map((p) => `### EXCERPT id=${p.id}\n### FROM: ${p.title}\n${p.content}`)
     .join("\n\n---\n\n");
 
   return [
     "You answer questions about a Scout group's policies, for leaders who need",
     "to know what the rules actually say.",
     "",
-    "STRICT RULES:",
-    "- Answer ONLY from the documents below. They are your sole source.",
-    "- Do not use outside knowledge about Scouting, safety or the law.",
-    "- If the documents don't cover the question, say so plainly. Do not guess.",
-    "- Every claim must be supported by a citation quoting the document word for word.",
-    "- Quotes must be copied EXACTLY from the document, not paraphrased or tidied up.",
-    "- Quote at least a full clause, never one or two words.",
-    "- Never invent a document, a title, a quote, or a section number.",
+    "WHAT YOU HAVE BEEN GIVEN:",
+    "- Excerpts, not whole policies. Each is a passage from a longer document,",
+    "  picked because it matches the question. Text before and after it exists",
+    "  and you cannot see it.",
+    "- A rule you cannot find may therefore still exist elsewhere in that policy.",
+    "  Say the excerpts do not cover it, not that the policy does not say it:",
+    "  the first is true and the second is a claim you cannot make from here.",
     "",
-    "WHEN THE DOCUMENTS DON'T ANSWER THE QUESTION:",
+    "STRICT RULES:",
+    "- Answer ONLY from the excerpts below. They are your sole source.",
+    "- Do not use outside knowledge about Scouting, safety or the law.",
+    "- If the excerpts don't cover the question, say so plainly. Do not guess.",
+    "- Every claim must be supported by a citation quoting an excerpt word for word.",
+    "- Quotes must be copied EXACTLY from the excerpt, not paraphrased or tidied up.",
+    "- Quote at least a full clause, never one or two words.",
+    "- Never invent an excerpt, a title, a quote, or a section number.",
+    "",
+    "WHEN THE EXCERPTS DON'T ANSWER THE QUESTION:",
     "- Set \"covered\" to false. Set it to true whenever you did answer.",
-    "- Say what IS missing, specifically: name the thing the documents are silent",
+    "- Say what IS missing, specifically: name the thing the excerpts are silent",
     "  about, rather than repeating the question back.",
-    "- Then be useful anyway. If the documents say something adjacent — a related",
+    "- Then be useful anyway. If the excerpts say something adjacent — a related",
     "  rule, a general principle, a section that nearly applies — give it and cite",
     "  it, making clear it does not settle the question. If there is genuinely",
     "  nothing adjacent, say that instead of stretching for it.",
@@ -96,10 +111,10 @@ function buildPrompt(policies: Policy[], question: string, history: string): str
     "  A clear \"this isn't written down anywhere\" is the useful answer.",
     "",
     'Reply as JSON: {"answer": string, "covered": boolean, "related": string[], "citations": [{"policy_id": string, "quote": string}]}',
-    "The quote must be an exact substring of that document's text.",
+    "The quote must be an exact substring of that excerpt's text.",
     "",
     history ? `EARLIER IN THIS CONVERSATION:\n${history}\n` : "",
-    "DOCUMENTS:",
+    "EXCERPTS:",
     documents,
     "",
     `QUESTION: ${question}`,
