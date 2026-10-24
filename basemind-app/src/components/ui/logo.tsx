@@ -7,6 +7,12 @@ import { cn } from "./utils";
  * ground line. Kept byte-identical to public/favicon.svg — if you redraw one,
  * redraw the other.
  *
+ * The tent is a filled polygon, not a stroked path. It was stroked before,
+ * which rounded the peak into a dome and cut the legs off at a slant where
+ * they should sit flat on the ground. Six points say it exactly, and spare
+ * the other two copies of this mark from having to agree about stroke width,
+ * joins and caps as well as coordinates.
+ *
  * The colours are hardcoded rather than themed. A logo that changes colour
  * between light and dark stops being a logo, and this one is a dark tile on
  * purpose: it reads the same on a white page, a dark page and a phone's home
@@ -22,14 +28,8 @@ function Logo({ className, ...props }: React.ComponentProps<"svg">) {
       {...props}
     >
       <rect width="100" height="100" rx="24" fill="#18181b" />
-      <path
-        d="M22 73 L50 26 L78 73"
-        fill="none"
-        stroke="#ffffff"
-        strokeWidth="13"
-        strokeLinejoin="round"
-      />
-      <rect x="19" y="80" width="62" height="11" rx="5.5" fill="#b8a1ff" />
+      <path d="M50 21 L17 70 L36 70 L50 43 L64 70 L83 70 Z" fill="#ffffff" />
+      <rect x="14" y="76.5" width="72" height="7.5" rx="3.75" fill="#b8a1ff" />
     </svg>
   );
 }

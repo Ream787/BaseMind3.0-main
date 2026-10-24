@@ -21,26 +21,28 @@ export function drawLogo(doc: jsPDF, x: number, y: number, size: number): void {
   doc.setFillColor(24, 24, 27);
   doc.roundedRect(x, y, size, size, u(24), u(24), "F");
 
-  // The tent is a stroked path in the SVG. jsPDF strokes in the same units,
-  // so it is drawn the same way rather than approximated with triangles —
-  // that way the two marks stay the same shape when one of them is redrawn.
-  doc.setDrawColor(255, 255, 255);
-  doc.setLineWidth(u(13));
-  doc.setLineJoin("round");
-  doc.setLineCap("butt");
+  // The same six points as the SVG's polygon, as deltas from the peak.
+  // Filled rather than stroked: a stroke would make this copy depend on
+  // jsPDF and the browser agreeing about joins and caps as well as
+  // coordinates, and they do not have to.
+  doc.setFillColor(255, 255, 255);
   doc.lines(
     [
-      [u(28), u(-47)],
-      [u(28), u(47)],
+      [u(-33), u(49)], // peak down to the left foot
+      [u(19), u(0)], //  flat along the ground
+      [u(14), u(-27)], // up the inside of the left leg
+      [u(14), u(27)], //  down the inside of the right leg
+      [u(19), u(0)], //  flat along the ground
     ],
-    x + u(22),
-    y + u(73),
+    x + u(50),
+    y + u(21),
     [1, 1],
-    "S",
+    "F",
+    true,
   );
 
   doc.setFillColor(184, 161, 255);
-  doc.roundedRect(x + u(19), y + u(80), u(62), u(11), u(5.5), u(5.5), "F");
+  doc.roundedRect(x + u(14), y + u(76.5), u(72), u(7.5), u(3.75), u(3.75), "F");
 }
 
 /**
