@@ -27,6 +27,9 @@ const StoragePlacePage = lazy(() =>
     default: m.StoragePlacePage,
   })),
 );
+const RoomsPage = lazy(() =>
+  import("@/components/equipment/RoomsPage").then((m) => ({ default: m.RoomsPage })),
+);
 const RepairsPage = lazy(() =>
   import("@/components/equipment/RepairsPage").then((m) => ({ default: m.RepairsPage })),
 );
@@ -143,6 +146,18 @@ export const router = createBrowserRouter([
             <EquipmentProvider>
               <StoragePlacePage />
             </EquipmentProvider>
+          </Gate>
+        ),
+      },
+      {
+        // Keeping the room list itself, rather than only accumulating rooms
+        // as a side effect of typing a name into a picker. No
+        // EquipmentProvider: it reads the rooms table and the counts, not
+        // the inventory.
+        path: "rooms",
+        element: (
+          <Gate feature="equipment">
+            <RoomsPage />
           </Gate>
         ),
       },
