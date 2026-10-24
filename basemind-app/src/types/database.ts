@@ -588,6 +588,29 @@ export type Database = {
         Args: { keep_id: string; drop_id: string };
         Returns: void;
       };
+      /**
+       * The passages of the policies that bear on a question.
+       *
+       * Replaces sending every policy in full on every question. Each row
+       * is a contiguous substring of its policy, so a quote can still be
+       * checked against the text it came from; pair policy_id with seq to
+       * give each passage an id of its own.
+       */
+      search_policy_passages: {
+        Args: {
+          p_question: string;
+          p_limit?: number;
+          p_window?: number;
+          p_per_doc?: number;
+        };
+        Returns: {
+          policy_id: string;
+          seq: number;
+          title: string;
+          passage: string;
+          rank: number;
+        }[];
+      };
       save_menu_as_preset: {
         Args: { source_menu_id: string; preset_name: string; preset_category?: string | null };
         Returns: string;

@@ -189,17 +189,20 @@ function saysItDoesNotKnow(answer: string): boolean {
 }
 
 /**
- * Keeps the prompt within budget by dropping the least relevant policies.
+ * Last-resort trim, kept as a backstop.
  *
- * Everything is sent by default — a group's policies are small next to the
- * model's context. This only matters if that stops being true, and dropping
- * whole documents is preferable to truncating them mid-sentence, which would
- * make quotes fail verification for no visible reason.
+ * Passages come from search_policy_passages already sized for the prompt, so
+ * this normally has nothing to do. It stays because the budget is the one
+ * thing standing between a long question and a day's quota, and a bug
+ * upstream should cost a truncated prompt rather than a dead assistant.
+ *
+ * Dropping whole documents is preferable to truncating them mid-sentence,
+ * which would make quotes fail verification for no visible reason.
  */
 export function selectPoliciesForPrompt(
   policies: PolicySource[],
   question: string,
-  maxChars = 400_000,
+  maxChars = 60_000,
 ): PolicySource[] {
   const usable = policies.filter((p) => p.content.trim().length > 0);
   const total = usable.reduce((sum, p) => sum + p.content.length, 0);
@@ -240,3 +243,37 @@ export function selectPoliciesForPrompt(
   }
   return chosen;
 }
+
+/**
+ * The passages of the policies that bear on a question.
+ *
+ * This used to be "every policy, in full, every time": 80 documents and
+ * about 318,000 tokens a question, which ran the day's quota out in two.
+ * The ranking, the window and the weighting all live in
+ * search_policy_passages — see 0031 for why each of them is the way it is.
+ *
+ * Each passage becomes a document in its own right, with an id of
+ * `<policy id>#<seq>`. Two passages of one policy must not share an id, or
+ * the quote check will look for the first one's words in the second and
+ * throw away a perfectly good citation. Nothing downstream reads the id —
+ * citations are displayed by title — so the suffix costs nothing.
+ */
+export async function fetchPolicyPassages(
+  question: string,
+  rpc: PassageRpc,
+): Promise<PolicySource[]> {
+  const { data, error } = await rpc(question);
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row) => ({
+    id: `${row.policy_id}#${row.seq}`,
+    title: row.title,
+    content: row.passage,
+  }));
+}
+
+/** Just the shape this needs from Supabase, so the lib stays testable. */
+export type PassageRpc = (question: string) => Promise<{
+  data: { policy_id: string; seq: number; title: string; passage: string }[] | null;
+  error: { message: string } | null;
+}>;
