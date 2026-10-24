@@ -89,10 +89,3 @@ const CODE_PATTERN = new RegExp(`^[${ALPHABET}]{${CODE_LENGTH}}$`);
 export function isBoxCode(value: string): boolean {
   return CODE_PATTERN.test(bareCode(value));
 }
-
-/** Sort boxes the way someone standing in a store would look for them. */
-export function sortBoxes<T extends { location: string; name: string }>(boxes: T[]): T[] {
-  return [...boxes].sort(
-    (a, b) => a.location.localeCompare(b.location) || a.name.localeCompare(b.name),
-  );
-}

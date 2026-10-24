@@ -3,7 +3,7 @@ import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
 import { useEquipment } from "@/context/EquipmentContext";
-import type { Equipment, EquipmentCondition } from "@/types/database";
+import type { Equipment, EquipmentCondition, Room } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchSelect } from "@/components/ui/search-select";
@@ -36,7 +36,8 @@ interface FormState {
   name: string;
   category: string;
   quantity: string;
-  location: string;
+  /** A room id, for a new item only. Where kit is lives in placements. */
+  room_id: string;
   condition: EquipmentCondition;
   notes: string;
   date_last_checked: string;
@@ -49,7 +50,7 @@ const emptyForm: FormState = {
   name: "",
   category: "",
   quantity: "1",
-  location: "",
+  room_id: "",
   condition: "Good",
   notes: "",
   date_last_checked: "",
@@ -63,7 +64,7 @@ function toFormState(equipment: Equipment): FormState {
     name: equipment.name,
     category: equipment.category ?? "",
     quantity: String(equipment.quantity),
-    location: equipment.location,
+    room_id: "",
     condition: equipment.condition,
     notes: equipment.notes ?? "",
     date_last_checked: equipment.date_last_checked ?? "",
@@ -97,7 +98,7 @@ interface EquipmentFormDialogProps {
   onOpenChange: (open: boolean) => void;
   equipment: Equipment | null;
   categories: string[];
-  locations: string[];
+  rooms: Room[];
   users: UserOption[];
   /**
    * The room to start in when adding.
@@ -105,7 +106,7 @@ interface EquipmentFormDialogProps {
    * Set when a room is open, so adding kit while standing in the container
    * files it in the container instead of asking where it is.
    */
-  defaultLocation?: string;
+  defaultRoomId?: string;
   /**
    * A storage place to file the new item into, rather than the room itself.
    *
@@ -123,13 +124,13 @@ export function EquipmentFormDialog({
   onOpenChange,
   equipment,
   categories,
-  locations,
+  rooms,
   users,
-  defaultLocation,
+  defaultRoomId,
   defaultStorageId,
   storageLabel,
 }: EquipmentFormDialogProps) {
-  const { addEquipment, updateEquipment } = useEquipment();
+  const { addEquipment, updateEquipment, roomIdFor } = useEquipment();
   const [form, setForm] = useState<FormState>(emptyForm);
   // What the form looked like when it opened, so "has anything been typed"
   // is a comparison rather than a guess.
@@ -142,11 +143,11 @@ export function EquipmentFormDialog({
     if (open) {
       const start = equipment
         ? toFormState(equipment)
-        : { ...emptyForm, location: defaultLocation ?? "" };
+        : { ...emptyForm, room_id: defaultRoomId ?? "" };
       setForm(start);
       setInitial(start);
     }
-  }, [open, equipment, defaultLocation]);
+  }, [open, equipment, defaultRoomId]);
 
   const dirty = JSON.stringify(form) !== JSON.stringify(initial);
   const intoStorage = !equipment && !!defaultStorageId;
@@ -163,7 +164,6 @@ export function EquipmentFormDialog({
       name: form.name.trim(),
       category: form.category.trim() || null,
       quantity: Number(form.quantity) || 0,
-      location: form.location.trim(),
       condition: form.condition,
       notes: form.notes.trim() || null,
       date_last_checked: form.date_last_checked || null,
@@ -182,11 +182,11 @@ export function EquipmentFormDialog({
         // straight away rather than sitting under "not placed" waiting for
         // somebody to notice. Where things are lives in placements now; this
         // form's Room field is the answer to "where does it go to start with".
-        if (created && payload.quantity > 0 && (intoStorage || payload.location)) {
+        if (created && payload.quantity > 0 && (intoStorage || form.room_id)) {
           const { error } = await supabase.rpc("place_equipment", {
             p_equipment_id: created.id,
             p_storage_id: intoStorage ? defaultStorageId! : null,
-            p_location: intoStorage ? null : payload.location,
+            p_room_id: intoStorage ? null : form.room_id,
             p_quantity: payload.quantity,
           });
           // The item exists and is correct; only its filing failed.
@@ -260,28 +260,42 @@ export function EquipmentFormDialog({
                 onChange={(e) => set("quantity", e.target.value)}
               />
             </div>
+            {!equipment && (
             <div className="flex flex-col gap-2 sm:col-span-2">
-              <Label htmlFor="eq-location">Room</Label>
+              <Label htmlFor="eq-room">Room</Label>
               {intoStorage ? (
                 // Not a choice: the item is going in the thing you opened
                 // this from, and that is in whatever room it is in. Offering
                 // a room field here would let the two disagree.
                 <p className="flex min-h-9 items-center rounded-md border border-dashed px-3 text-sm text-muted-foreground">
-                  Going into {storageLabel ?? form.location}
+                  Going into {storageLabel ?? "this storage place"}
                 </p>
               ) : (
                 <SearchSelect
-                  id="eq-location"
-                  value={form.location || null}
-                  onChange={(v) => set("location", v)}
-                  onCreate={(v) => set("location", v)}
+                  id="eq-room"
+                  value={form.room_id || null}
+                  onChange={(v) => set("room_id", v)}
+                  // Typing a room that does not exist yet creates it, which
+                  // is what the old free-text field did by accident. The
+                  // difference is that it becomes a row everything else can
+                  // point at, rather than a sixth spelling of Room 5.
+                  onCreate={async (v) => {
+                    try {
+                      set("room_id", await roomIdFor(v));
+                    } catch (err) {
+                      toast.error(
+                        err instanceof Error ? err.message : "Couldn't add that room",
+                      );
+                    }
+                  }}
                   createLabel="New room"
                   placeholder="Pick a room"
                   searchPlaceholder="Search or type a new one…"
-                  options={locations.map((l) => ({ value: l, label: l }))}
+                  options={rooms.map((r) => ({ value: r.id, label: r.name }))}
                 />
               )}
             </div>
+            )}
             <div className="flex flex-col gap-2">
               <Label>Colour band</Label>
               {/* The whole point of the band scheme, and there was no way to

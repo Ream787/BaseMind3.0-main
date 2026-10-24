@@ -12,6 +12,13 @@ type PdfDoc = jsPDF & { lastAutoTable?: { finalY: number } };
 export type PackingLine = {
   equipment: Equipment;
   quantity: number;
+  /**
+   * Where it is kept, as one line.
+   *
+   * Passed in rather than read off the item: where a thing is lives in its
+   * placements now, and this file has no database access to resolve them.
+   */
+  where: string;
 };
 
 export type MenuDay = {
@@ -154,7 +161,7 @@ export async function downloadCampPlanPdf(data: CampPlanData): Promise<void> {
         String(line.quantity),
         line.equipment.name,
         line.equipment.category ?? "—",
-        line.equipment.location,
+        line.where,
         line.equipment.condition,
         "", // tick-box column for use on the day
       ]),

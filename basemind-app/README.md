@@ -169,6 +169,10 @@ Open the SQL Editor in your Supabase project and run the migrations in
 | `0008_feature_flags.sql` | The switches on the admin page for turning features off |
 | `0009_policies.sql` | Policy documents, their extracted text, and the `policies` bucket |
 | `0010_user_icons.sql` | The emblem and colour each person picked for their badge |
+| `0029_rooms_as_a_table.sql` | `rooms`, with `room_id` on placements and storage places; drops the free-text `location` columns |
+
+> The table above stops at the migration it stops at; the folder has gone on past it. Run
+> everything in there in order — including `0029_rooms_as_a_table.sql`, which is the last one.
 
 If you already set the project up, run whichever ones you haven't yet — the app's calendar,
 sites and food pages will error until `0003` has been applied. `0002` and `0010` are safe to

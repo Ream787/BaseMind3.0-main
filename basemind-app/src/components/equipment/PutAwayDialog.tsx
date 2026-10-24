@@ -30,12 +30,13 @@ import {
 export function PutAwayDialog({
   open,
   onOpenChange,
-  room,
+  roomName,
   strays,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  room: string;
+  /** Only shown, never matched on — the strays were found by room id. */
+  roomName: string;
   strays: StrayLoose[];
 }) {
   const [working, setWorking] = useState(false);
@@ -61,7 +62,7 @@ export function PutAwayDialog({
     onOpenChange(false);
 
     if (moved > 0) {
-      toast.success(`${moved} ${moved === 1 ? "item" : "items"} put away in ${room}`);
+      toast.success(`${moved} ${moved === 1 ? "item" : "items"} put away in ${roomName}`);
     }
     if (failed.length > 0) {
       toast.error(failed[0], {
@@ -77,7 +78,7 @@ export function PutAwayDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Put these away?</AlertDialogTitle>
           <AlertDialogDescription>
-            Each of these is filed both loose in {room} and in something standing in it.
+            Each of these is filed both loose in {roomName} and in something standing in it.
             Where the two are the same kit counted twice, the loose copy goes; where they
             are different kit, it moves in. Either way the room list clears and the number
             the group owns does not change.

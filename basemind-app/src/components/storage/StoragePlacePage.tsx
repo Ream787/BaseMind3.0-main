@@ -31,6 +31,7 @@ import {
 import type { Equipment, EquipmentPlacement } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { EquipmentFormDialog } from "@/components/equipment/EquipmentFormDialog";
+import { SearchSelect } from "@/components/ui/search-select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -72,7 +73,13 @@ export function StoragePlacePage() {
   const navigate = useNavigate();
   const { profile, hasRole } = useAuth();
   const { online } = useOffline();
-  const { equipment, updateEquipment } = useEquipment();
+  const { equipment, rooms, roomsById, updateEquipment, roomIdFor } = useEquipment();
+
+  /**
+   * A room's name for display. A room the list has not caught up with yet
+   * shows as a dash rather than the word "undefined".
+   */
+  const roomNameOf = (roomId: string) => roomsById.get(roomId)?.name ?? "—";
   const { rows: places, loading } = useRealtimeTable("storage_places", { orderBy: "name" });
   const { rows: placements } = useRealtimeTable("equipment_placements");
 
@@ -82,7 +89,7 @@ export function StoragePlacePage() {
   const [newQuantity, setNewQuantity] = useState("1");
   const [adding, setAdding] = useState(false);
   const [draftName, setDraftName] = useState("");
-  const [draftLocation, setDraftLocation] = useState("");
+  const [draftRoomId, setDraftRoomId] = useState("");
   const [draftKind, setDraftKind] = useState("");
   const [newPlace, setNewPlace] = useState("");
   const [newPlaceKind, setNewPlaceKind] = useState(DEFAULT_KIND);
@@ -164,14 +171,9 @@ export function StoragePlacePage() {
   useEffect(() => {
     if (!box) return;
     setDraftName((prev) => (prev === "" ? box.name : prev));
-    setDraftLocation((prev) => (prev === "" ? box.location : prev));
+    setDraftRoomId((prev) => (prev === "" ? box.room_id : prev));
     setDraftKind((prev) => (prev === "" ? box.kind : prev));
   }, [box]);
-
-  const locations = useMemo(
-    () => Array.from(new Set(equipment.map((e) => e.location).filter(Boolean))).sort(),
-    [equipment],
-  );
 
   const categories = useMemo(
     () =>
@@ -214,18 +216,18 @@ export function StoragePlacePage() {
     );
   }
 
-  async function saveHeader() {
+  async function saveHeader(nextRoomId?: string) {
     if (!box) return;
     const name = draftName.trim() || box.name;
     const kind = draftKind.trim() || box.kind;
-    const location = draftLocation.trim() || box.location;
-    if (name === box.name && location === box.location && kind === box.kind) return;
+    const roomId = nextRoomId || draftRoomId || box.room_id;
+    if (name === box.name && roomId === box.room_id && kind === box.kind) return;
 
     // A nested place takes its room from its parent, so sending a room for
     // one would be overwritten by the database anyway. Don't pretend to set it.
     const { error } = await supabase
       .from("storage_places")
-      .update(box.parent_id ? { name, kind } : { name, kind, location })
+      .update(box.parent_id ? { name, kind } : { name, kind, room_id: roomId })
       .eq("id", box.id);
     if (error) toast.error(error.message);
   }
@@ -289,7 +291,7 @@ export function StoragePlacePage() {
         keepContents && emptied > 0
           ? `${box.name} removed — its ${
               emptied === 1 ? "item is" : "items are"
-            } now loose in ${box.location}`
+            } now loose in ${roomNameOf(box.room_id)}`
           : `${box.name} removed`,
       );
       navigate("/equipment");
@@ -351,9 +353,6 @@ export function StoragePlacePage() {
           name,
           category: null,
           quantity,
-          // The box's room, so the room views agree without anyone
-          // having to set it in two places.
-          location: box.location,
           condition: "Good",
           notes: null,
           date_last_checked: null,
@@ -364,10 +363,11 @@ export function StoragePlacePage() {
         .single();
       if (error) throw new Error(error.message);
 
+      // Filed straight into this box, which is what carries the room.
       const { error: placeError } = await supabase.rpc("place_equipment", {
         p_equipment_id: data.id,
         p_storage_id: box.id,
-        p_location: null,
+        p_room_id: null,
         p_quantity: quantity,
       });
       if (placeError) throw new Error(placeError.message);
@@ -398,7 +398,7 @@ export function StoragePlacePage() {
         name,
         kind: newPlaceKind.trim() || DEFAULT_KIND,
         code: generateBoxCode(),
-        location: box.location,
+        room_id: box.room_id,
         parent_id: box.id,
       });
       if (error) throw new Error(error.message);
@@ -419,7 +419,7 @@ export function StoragePlacePage() {
       const { error } = await supabase.rpc("place_equipment", {
         p_equipment_id: placement.equipment_id,
         p_storage_id: box.id,
-        p_location: null,
+        p_room_id: null,
         p_quantity: quantity,
       });
       if (error) throw new Error(error.message);
@@ -446,10 +446,10 @@ export function StoragePlacePage() {
       <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
         <ArrowLeft className="size-4 shrink-0" />
         <Link
-          to={`/equipment?room=${encodeURIComponent(box.location)}`}
+          to={`/equipment?room=${encodeURIComponent(roomNameOf(box.room_id))}`}
           className="hover:text-foreground hover:underline"
         >
-          {box.location}
+          {roomNameOf(box.room_id)}
         </Link>
         {ancestors.map((up) => (
           <span key={up.id} className="flex items-center gap-1">
@@ -481,7 +481,7 @@ export function StoragePlacePage() {
                   // on a phone put the caret after it and the first thing
                   // anybody typed became "New boxRope box".
                   onFocus={(e) => e.target.select()}
-                  onBlur={saveHeader}
+                  onBlur={() => saveHeader()}
                   disabled={blocked !== null}
                   placeholder="Cooking box 1"
                 />
@@ -495,7 +495,7 @@ export function StoragePlacePage() {
                   list="box-kind-options"
                   value={draftKind}
                   onChange={(e) => setDraftKind(e.target.value)}
-                  onBlur={saveHeader}
+                  onBlur={() => saveHeader()}
                   disabled={blocked !== null}
                   placeholder={DEFAULT_KIND}
                 />
@@ -513,20 +513,29 @@ export function StoragePlacePage() {
                   <Label htmlFor="box-location" className="text-xs text-muted-foreground">
                     Store
                   </Label>
-                  <Input
+                  <SearchSelect
                     id="box-location"
-                    list="box-location-options"
-                    value={draftLocation}
-                    onChange={(e) => setDraftLocation(e.target.value)}
-                    onBlur={saveHeader}
-                    disabled={blocked !== null}
-                    placeholder="Store Room"
+                    value={draftRoomId || null}
+                    onChange={(v) => {
+                      setDraftRoomId(v);
+                      void saveHeader(v);
+                    }}
+                    onCreate={async (v) => {
+                      try {
+                        const id = await roomIdFor(v);
+                        setDraftRoomId(id);
+                        void saveHeader(id);
+                      } catch (err) {
+                        toast.error(
+                          err instanceof Error ? err.message : "Couldn't add that room",
+                        );
+                      }
+                    }}
+                    createLabel="New room"
+                    placeholder="Pick a room"
+                    searchPlaceholder="Search or type a new one…"
+                    options={rooms.map((r) => ({ value: r.id, label: r.name }))}
                   />
-                  <datalist id="box-location-options">
-                    {locations.map((l) => (
-                      <option key={l} value={l} />
-                    ))}
-                  </datalist>
                 </div>
               )}
             </div>
@@ -534,7 +543,7 @@ export function StoragePlacePage() {
             <div>
               <h1>{box.name}</h1>
               <p className="text-sm text-muted-foreground">
-                {box.kind} · {box.location}
+                {box.kind} · {roomNameOf(box.room_id)}
               </p>
             </div>
           )}
@@ -818,11 +827,11 @@ export function StoragePlacePage() {
         onOpenChange={setFormOpen}
         equipment={null}
         categories={categories}
-        locations={locations}
+        rooms={rooms}
         users={users}
-        defaultLocation={box.location}
+        defaultRoomId={box.room_id}
         defaultStorageId={box.id}
-        storageLabel={pathOf(box, placesById).join(" › ")}
+        storageLabel={pathOf(box, placesById, roomsById).join(" › ")}
       />
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
@@ -838,7 +847,7 @@ export function StoragePlacePage() {
                     held === 1 ? "stays" : "stay"
                   } in the inventory and ${
                     held === 1 ? "becomes" : "become"
-                  } loose in ${box.location}. Nothing is deleted from the inventory.`}
+                  } loose in ${roomNameOf(box.room_id)}. Nothing is deleted from the inventory.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

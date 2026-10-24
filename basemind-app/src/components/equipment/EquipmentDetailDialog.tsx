@@ -13,7 +13,8 @@ import type { Equipment, EquipmentLoan, StoragePlace } from "@/types/database";
 import type { EquipmentPlacement } from "@/types/database";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
 import { availableQuantity, isOutstanding, onLoanQuantity } from "@/lib/loans";
-import { pathOf, unplacedQuantity, UNPLACED_LABEL } from "@/lib/placements";
+import { pathOf, roomName, unplacedQuantity, UNPLACED_LABEL } from "@/lib/placements";
+import { useEquipment } from "@/context/EquipmentContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ColourSwatch } from "@/components/equipment/ColourSwatch";
@@ -80,6 +81,7 @@ export function EquipmentDetailDialog({
 }) {
   const { rows: faults } = useRealtimeTable("equipment_faults");
 
+  const { roomsById } = useEquipment();
   const placesById = useMemo(() => new Map(places.map((p) => [p.id, p])), [places]);
 
   /**
@@ -96,13 +98,13 @@ export function EquipmentDetailDialog({
           const place = placesById.get(p.storage_id);
           return place
             ? {
-                label: pathOf(place, placesById).join(" › "),
+                label: pathOf(place, placesById, roomsById).join(" › "),
                 quantity: p.quantity,
                 code: place.code,
               }
             : null;
         }
-        const room = (p.location ?? "").trim();
+        const room = roomName(p.room_id, roomsById)?.trim();
         return room ? { label: room, quantity: p.quantity, code: null } : null;
       })
       .filter((r): r is { label: string; quantity: number; code: string | null } => r !== null)
@@ -113,7 +115,7 @@ export function EquipmentDetailDialog({
       rows.push({ label: UNPLACED_LABEL, quantity: spare || item.quantity, code: null });
     }
     return rows;
-  }, [item, placements, placesById]);
+  }, [item, placements, placesById, roomsById]);
 
   const out = useMemo(() => (item ? onLoanQuantity(item.id, loans) : 0), [item, loans]);
   const openLoans = useMemo(

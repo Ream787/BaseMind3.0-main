@@ -186,7 +186,7 @@ export function EquipmentTable({
                     )}
                   </Detail>
                   <Where parts={placementDetail?.get(item.id)}>
-                    {placementSummary?.get(item.id) ?? item.location}
+                    {placementSummary?.get(item.id) ?? "—"}
                   </Where>
                   {item.next_check_date && (
                     <Detail label="Next check">{item.next_check_date}</Detail>
@@ -288,7 +288,7 @@ export function EquipmentTable({
                   </TableCell>
                   <TableCell className="max-w-56">
                     <span className="block truncate" title={placementSummary?.get(item.id)}>
-                      {placementSummary?.get(item.id) ?? item.location}
+                      {placementSummary?.get(item.id) ?? "—"}
                     </span>
                   </TableCell>
                   <TableCell>

@@ -913,6 +913,10 @@ Open the SQL Editor and run everything in
 | `0009_policies.sql` | Policy documents, extracted text, the `policies` bucket, the ninth switch |
 | `0010_user_icons.sql` | The emblem/colour columns; removes the old `avatars` bucket |
 | `0011_assistant_chats.sql` | Saved chats and messages, policy source URLs, unique titles |
+| `0029_rooms_as_a_table.sql` | `rooms`, with `room_id` on placements and storage places; drops the free-text `location` columns |
+
+> The table above stops at the migration it stops at; the folder has gone on past it. Run
+> everything in there in order — including `0029_rooms_as_a_table.sql`, which is the last one.
 
 `0002` and `0010` are safe to run twice; the rest are not, so keep track of which you have done.
 The calendar, sites and food pages will error until `0003` has been applied.

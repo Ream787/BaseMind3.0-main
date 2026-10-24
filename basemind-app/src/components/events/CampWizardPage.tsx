@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
+import { useRoomLabels } from "@/lib/useRoomLabels";
 import { useAuth } from "@/context/AuthContext";
 import { useRealtimeTable } from "@/lib/useRealtimeTable";
 import { availableQuantity } from "@/lib/loans";
@@ -60,6 +61,7 @@ function readDraft(): Partial<Draft> {
 
 export function CampWizardPage() {
   const navigate = useNavigate();
+  const { roomLabel } = useRoomLabels();
   const { hasRole } = useAuth();
 
   const { rows: sites } = useRealtimeTable("camping_sites", { orderBy: "name" });
@@ -401,7 +403,7 @@ export function CampWizardPage() {
                       />
                       <span className={`flex-1 text-sm ${free === 0 ? "text-muted-foreground" : ""}`}>
                         {item.name}
-                        <span className="text-muted-foreground"> · {item.location}</span>
+                        <span className="text-muted-foreground"> · {roomLabel(item.id)}</span>
                       </span>
                       <span className="text-xs text-muted-foreground">
                         {serviceable ? `${free} free` : item.condition.toLowerCase()}
